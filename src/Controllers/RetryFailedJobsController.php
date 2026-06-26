@@ -2,11 +2,9 @@
 
 namespace EdwardTich\FailedJobsManager\Controllers;
 
-use EdwardTich\FailedJobsManager\Models\FailedJob;
 use EdwardTich\FailedJobsManager\Services\FailedJobRetryService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 class RetryFailedJobsController
 {
@@ -22,19 +20,18 @@ class RetryFailedJobsController
             ],
             'ids.*' => [
                 'integer',
-                Rule::exists(config('failed-jobs-manager.table'), 'id'),
+                'distinct',
             ],
         ]);
 
-        $ids = FailedJob::query()
-            ->whereIn('id', $request->input('ids'))
-            ->pluck('id')
-            ->all();
+        $result = $retryService->retryByFailedJobIds($request->input('ids'));
 
-        $retryService->retry($ids);
+        $redirect = redirect()->route('failed-jobs-manager::index');
 
-        return redirect()
-            ->route('failed-jobs-manager::index')
-            ->with('success', 'Задачи отправлены на перезапуск');
+        if (! $result) {
+            return $redirect->with('error', __('failed-jobs-manager::failed-jobs-manager.flash.retry_failed'));
+        }
+
+        return $redirect->with('success', __('failed-jobs-manager::failed-jobs-manager.flash.bulk_retry_sent'));
     }
 }

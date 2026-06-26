@@ -12,10 +12,16 @@ class DeleteFailedJobController
     {
         abort_unless(config('failed-jobs-manager.ui.allow_delete'), 403);
 
-        $deleteService->delete($failedJob);
+        $result = $deleteService->delete($failedJob);
+
+        if (! $result) {
+            return redirect()
+                ->route('failed-jobs-manager::index')
+                ->with('error', __('failed-jobs-manager::failed-jobs-manager.flash.delete_failed'));
+        }
 
         return redirect()
             ->route('failed-jobs-manager::index')
-            ->with('success', 'Запись удалена');
+            ->with('success', __('failed-jobs-manager::failed-jobs-manager.flash.deleted'));
     }
 }

@@ -2,6 +2,8 @@
 
 namespace EdwardTich\FailedJobsManager\Models;
 
+use EdwardTich\FailedJobsManager\Support\FailedJobException;
+use EdwardTich\FailedJobsManager\Support\FailedJobPayload;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
@@ -50,6 +52,12 @@ class FailedJob extends Model
                 $query->where('queue', $queue);
             })
             ->when($filters['search'] ?? null, function (Builder $query, string $search) {
+                $search = trim(Str::limit($search, (int) config('failed-jobs-manager.ui.search_max_length', 120), ''));
+
+                if ($search === '') {
+                    return;
+                }
+
                 $query->where(function (Builder $query) use ($search) {
                     $query
                         ->where('payload', 'like', '%' . $search . '%')
@@ -57,20 +65,39 @@ class FailedJob extends Model
                 });
             })
             ->when($filters['failed_from'] ?? null, function (Builder $query, string $date) {
-                $query->whereDate('failed_at', '>=', $date);
+                $query->where('failed_at', '>=', $date . ' 00:00:00');
             })
             ->when($filters['failed_to'] ?? null, function (Builder $query, string $date) {
-                $query->whereDate('failed_at', '<=', $date);
+                $query->where('failed_at', '<=', $date . ' 23:59:59');
             });
     }
 
     public function getPayloadPreview(): string
     {
-        return Str::limit($this->payload, config('failed-jobs-manager.ui.payload_preview_length'));
+        return $this->payloadDetails()->preview(config('failed-jobs-manager.ui.payload_preview_length'));
     }
 
     public function getExceptionPreview(): string
     {
-        return Str::limit($this->exception, config('failed-jobs-manager.ui.exception_preview_length'));
+        return $this->exceptionDetails()->preview(config('failed-jobs-manager.ui.exception_preview_length'));
+    }
+
+    public function payloadDetails(): FailedJobPayload
+    {
+        return FailedJobPayload::from($this->payload);
+    }
+
+    public function exceptionDetails(): FailedJobException
+    {
+        return FailedJobException::from($this->exception);
+    }
+
+    public function retryKey(): int|string
+    {
+        return match (config('failed-jobs-manager.ui.retry_key', 'auto')) {
+            'id' => $this->id,
+            'uuid' => $this->uuid ?: $this->id,
+            default => $this->uuid ?: $this->id,
+        };
     }
 }

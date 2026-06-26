@@ -12,10 +12,14 @@ class RetryFailedJobController
     {
         abort_unless(config('failed-jobs-manager.ui.allow_retry'), 403);
 
-        $retryService->retry([$failedJob->id]);
+        $result = $retryService->retryByFailedJobIds([$failedJob->id]);
 
-        return redirect()
-            ->route('failed-jobs-manager::index')
-            ->with('success', 'Задача отправлена на перезапуск');
+        $redirect = redirect()->route('failed-jobs-manager::index');
+
+        if (! $result) {
+            return $redirect->with('error', __('failed-jobs-manager::failed-jobs-manager.flash.retry_failed'));
+        }
+
+        return $redirect->with('success', __('failed-jobs-manager::failed-jobs-manager.flash.retry_sent'));
     }
 }

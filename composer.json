@@ -2,13 +2,14 @@
     "name": "edwardtich/laravel-failed-jobs-manager",
     "description": "Failed jobs manager UI for Laravel",
     "type": "library",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "license": "MIT",
     "require": {
         "php": "^8.2",
         "illuminate/console": "^11.0|^12.0",
         "illuminate/database": "^11.0|^12.0",
         "illuminate/http": "^11.0|^12.0",
+        "illuminate/queue": "^11.0|^12.0",
         "illuminate/routing": "^11.0|^12.0",
         "illuminate/support": "^11.0|^12.0",
         "illuminate/validation": "^11.0|^12.0",
@@ -25,6 +26,9 @@
                 "EdwardTich\\FailedJobsManager\\Providers\\FailedJobsManagerProvider"
             ]
         }
+    },
+    "suggest": {
+        "filament/filament": "Required for optional Filament page integration"
     },
     "config": {
         "sort-packages": true

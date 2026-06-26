@@ -1,0 +1,509 @@
+# Laravel Failed Jobs Manager
+
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/edwardtich/laravel-failed-jobs-manager.svg?style=flat-square)](https://packagist.org/packages/edwardtich/laravel-failed-jobs-manager)
+[![PHP Version Require](https://img.shields.io/packagist/php-v/edwardtich/laravel-failed-jobs-manager.svg?style=flat-square)](https://packagist.org/packages/edwardtich/laravel-failed-jobs-manager)
+[![Laravel Version](https://img.shields.io/badge/Laravel-11%2F12-orange?style=flat-square)](https://laravel.com)
+
+Пакет для Laravel, который помогает работать со стандартной таблицей `failed_jobs`.
+
+Возможности:
+
+- отдельный Laravel UI;
+- опциональная страница Filament;
+- повтор одного упавшего задания;
+- массовый повтор выбранных заданий;
+- удаление одной записи из `failed_jobs`;
+- читаемая сводка `payload` и `exception`;
+- русская и английская локализация.
+
+Массовый повтор использует стандартный формат Laravel:
+
+```bash
+php artisan queue:retry 42694 42695 42696
+```
+
+## Оглавление
+
+- [Требования](#требования)
+- [Установка](#установка)
+- [Публикация файлов](#публикация-файлов)
+- [Конфигурация](#конфигурация)
+- [Отдельный Laravel UI](#отдельный-laravel-ui)
+- [Интеграция с Filament](#интеграция-с-filament)
+- [Навигация Filament](#навигация-filament)
+- [Меню Filament Cluster](#меню-filament-cluster)
+- [Filament Shield и права доступа](#filament-shield-и-права-доступа)
+- [Локализация](#локализация)
+- [Пагинация](#пагинация)
+- [Ключ повтора](#ключ-повтора)
+- [Действия](#действия)
+- [Безопасность](#безопасность)
+- [История изменений](#история-изменений)
+
+## Требования
+
+- PHP 8.2+
+- Laravel 11 или 12
+- настроенная таблица `failed_jobs`
+- настроенный Laravel failed job provider для очередей
+- Filament нужен только для Filament-интеграции
+
+## Установка
+
+Установите пакет:
+
+```bash
+composer require edwardtich/laravel-failed-jobs-manager
+```
+
+Для локальной разработки через `packages/` добавьте path-репозиторий в `composer.json` основного проекта:
+
+```json
+{
+    "repositories": [
+        {
+            "type": "path",
+            "url": "packages/laravel-failed-jobs-manager",
+            "options": {
+                "symlink": true
+            }
+        }
+    ]
+}
+```
+
+Затем подключите пакет:
+
+```bash
+composer require edwardtich/laravel-failed-jobs-manager:*
+```
+
+## Публикация файлов
+
+Пакет работает без публикации config-файла, потому что service provider рекурсивно подмешивает настройки по умолчанию при регистрации.
+
+Публикуйте config только если нужно изменить route, middleware, пагинацию или настройки Filament:
+
+```bash
+php artisan vendor:publish --provider="EdwardTich\\FailedJobsManager\\Providers\\FailedJobsManagerProvider" --tag=config
+```
+
+Публикация Blade-шаблонов:
+
+```bash
+php artisan vendor:publish --provider="EdwardTich\\FailedJobsManager\\Providers\\FailedJobsManagerProvider" --tag=views
+```
+
+Публикация переводов:
+
+```bash
+php artisan vendor:publish --provider="EdwardTich\\FailedJobsManager\\Providers\\FailedJobsManagerProvider" --tag=translations
+```
+
+## Конфигурация
+
+После публикации config будет доступен по пути:
+
+```text
+config/failed-jobs-manager.php
+```
+
+Пакет не должен автоматически создавать этот файл в host-приложении при обычной загрузке. Это нормальное поведение Laravel packages.
+
+Конфигурация по умолчанию:
+
+```php
+return [
+    'table' => 'failed_jobs',
+    'connection' => null,
+
+    'ui' => [
+        'enabled' => true,
+
+        'route' => [
+            'prefix' => 'failed-jobs-manager',
+            'middleware' => [
+                'web',
+                'auth',
+            ],
+        ],
+
+        'per_page' => 20,
+        'allow_retry' => true,
+        'allow_delete' => true,
+        'retry_key' => 'auto',
+        'search_max_length' => 120,
+        'payload_preview_length' => 300,
+        'exception_preview_length' => 500,
+    ],
+
+    'filament' => [
+        'cluster' => null,
+        'register_navigation' => true,
+        'navigation_group' => null,
+        'navigation_parent_item' => null,
+        'navigation_sort' => null,
+        'permission' => null,
+        'roles' => [
+            'super_admin',
+        ],
+    ],
+];
+```
+
+## Отдельный Laravel UI
+
+Отдельный UI включен по умолчанию.
+
+URL по умолчанию:
+
+```text
+/failed-jobs-manager
+```
+
+По умолчанию маршрут использует middleware:
+
+```php
+'middleware' => [
+    'web',
+    'auth',
+],
+```
+
+В production не оставляйте доступ только по `auth`. Страница умеет перезапускать задания, удалять записи и показывать `payload` / `exception`, поэтому доступ должен быть ограничен администраторами или отдельным permission.
+
+Пример с role middleware:
+
+```php
+'route' => [
+    'prefix' => 'failed-jobs-manager',
+    'middleware' => [
+        'web',
+        'auth',
+        'role:admin',
+    ],
+],
+```
+
+Если используется только Filament-страница, отдельный UI можно отключить:
+
+```php
+'ui' => [
+    'enabled' => false,
+],
+```
+
+## Интеграция с Filament
+
+Filament является опциональной зависимостью. Пакет не требует `filament/filament` в `composer.json`, поэтому проекты без Filament могут использовать обычный Laravel UI.
+
+Зарегистрируйте страницу в вашем Filament panel provider:
+
+```php
+use EdwardTich\FailedJobsManager\Filament\Pages\FailedJobsManagerPage;
+use Filament\Pages\Dashboard;
+use Filament\Panel;
+
+public function panel(Panel $panel): Panel
+{
+    return $panel
+        ->pages([
+            Dashboard::class,
+            FailedJobsManagerPage::class,
+        ]);
+}
+```
+
+Если панель доступна по пути `/admin`, страница будет доступна по адресу:
+
+```text
+/admin/failed-jobs-manager
+```
+
+## Навигация Filament
+
+Настройка пункта меню находится в `config/failed-jobs-manager.php`:
+
+```php
+'filament' => [
+    'cluster' => null,
+    'register_navigation' => true,
+    'navigation_group' => 'Справочник',
+    'navigation_parent_item' => null,
+    'navigation_sort' => 40,
+    'permission' => null,
+    'roles' => [
+        'admin',
+    ],
+],
+```
+
+Чтобы скрыть страницу из бокового меню:
+
+```php
+'register_navigation' => false,
+```
+
+Страница останется доступной по URL, если текущий пользователь Filament проходит `canAccess()`.
+
+## Меню Filament Cluster
+
+Если в проекте используются Filament clusters и ручная структура бокового меню, настройте страницу как clustered page.
+
+Пример:
+
+```php
+'filament' => [
+    'cluster' => \App\Filament\Clusters\AdministrationCluster::class,
+    'register_navigation' => true,
+    'navigation_group' => 'Справочник',
+    'navigation_parent_item' => 'Администрирование',
+    'navigation_sort' => 40,
+    'permission' => null,
+    'roles' => [
+        'super_admin',
+    ],
+],
+```
+
+Страницу все равно нужно зарегистрировать в panel provider:
+
+```php
+use EdwardTich\FailedJobsManager\Filament\Pages\FailedJobsManagerPage;
+
+public function panel(Panel $panel): Panel
+{
+    return $panel
+        ->pages([
+            Dashboard::class,
+            FailedJobsManagerPage::class,
+        ]);
+}
+```
+
+Если боковое меню собирается вручную через массив родительского пункта, добавьте страницу и туда:
+
+```php
+protected array $administrationNavigation = [
+    UserResource::class,
+    RoleResource::class,
+    FailedJobsManagerPage::class,
+];
+```
+
+## Filament Shield и права доступа
+
+Если в проекте используется Filament Shield или Spatie Permission, лучше использовать permission-based доступ вместо жесткой проверки роли.
+
+Пакет сам не создает permissions в базе. Это намеренно: права должны генерироваться и назначаться в приложении, где уже настроены Shield, роли и guard.
+
+Пример:
+
+```php
+'filament' => [
+    'permission' => null,
+    'roles' => [
+        'admin',
+    ],
+],
+```
+
+Если `permission` равен `null` и Filament Shield установлен, пакет попробует автоматически получить permission, который Shield сгенерировал для страницы.
+
+Для production лучше задавать permission явно. Так поведение не будет зависеть от настроек генерации Shield в конкретном проекте:
+
+```php
+'filament' => [
+    'permission' => 'View:FailedJobsManagerPage',
+    'roles' => [
+        'admin',
+    ],
+],
+```
+
+Если нужно задать permission вручную, используйте точный ключ из Shield. Например, при настройках Shield `separator => ':'`, `case => 'pascal'` и `prefix => 'view'` для page будет сгенерирован ключ:
+
+```text
+View:FailedJobsManagerPage
+```
+
+После этого пакет проверяет:
+
+```php
+$user->can($permission);
+```
+
+`roles` используется только как fallback. Это удобно, например, для `super_admin` до генерации или назначения Shield permissions, но основную проверку доступа в production лучше держать через permission.
+
+После регистрации страницы можно сгенерировать права Shield:
+
+```bash
+php artisan shield:generate
+```
+
+Затем откройте страницу ролей Filament и выдайте нужное право:
+
+```text
+/admin/shield/roles
+```
+
+Например:
+
+```text
+View:FailedJobsManagerPage
+```
+
+Если Shield в проекте настроен с другим `separator`, `case` или `prefix`, название permission будет другим. В таком случае смотрите фактическое имя права на странице ролей Shield и укажите его в `failed-jobs-manager.filament.permission`.
+
+## Локализация
+
+Пакет содержит русские и английские переводы.
+
+Laravel использует текущую локаль приложения:
+
+```php
+'locale' => 'ru',
+```
+
+Namespace переводов:
+
+```text
+failed-jobs-manager::failed-jobs-manager
+```
+
+## Пагинация
+
+По умолчанию на странице отображается 20 записей:
+
+```php
+'ui' => [
+    'per_page' => 20,
+],
+```
+
+Пакет всегда использует пагинацию, чтобы не загружать всю таблицу `failed_jobs`.
+
+Поиск ограничивается перед запросом к базе:
+
+```php
+'ui' => [
+    'search_max_length' => 120,
+],
+```
+
+Фильтр поиска проверяет `payload` и `exception` через wildcard `LIKE`. Это нормально для операционного просмотра, но не надо притворяться, что это инструмент аналитики для больших объемов.
+
+## Ключ повтора
+
+В разных версиях Laravel повтор failed jobs может работать по разным идентификаторам. Старые проекты чаще используют числовой `id`, новые могут использовать `uuid`.
+
+Настройка ключа повтора:
+
+```php
+'ui' => [
+    'retry_key' => 'auto',
+],
+```
+
+Доступные значения:
+
+- `auto` - использовать `uuid`, если он есть, иначе `id`;
+- `id` - всегда вызывать команды очередей с ID записи;
+- `uuid` - вызывать команды очередей с UUID, fallback на ID, если UUID пустой.
+
+Интерфейс все равно выбирает строки по внутреннему `id`. Настройка `retry_key` применяется при вызове Laravel-команд очередей для повтора и удаления: `queue:retry` и `queue:forget`.
+
+## Действия
+
+### Повтор одного задания
+
+Пакет вызывает Laravel-команду `queue:retry` с настроенным ключом повтора.
+
+### Повтор выбранных заданий
+
+Пакет собирает выбранные ID, преобразует их в настроенные retry keys и вызывает стандартную команду Laravel:
+
+```bash
+php artisan queue:retry 42694 42695 42696
+```
+
+Если `retry_key` равен `auto` или `uuid`, команда может выглядеть так:
+
+```bash
+php artisan queue:retry 550e8400-e29b-41d4-a716-446655440000
+```
+
+### Удаление одного задания
+
+Из UI можно удалить одну failed job через стандартную команду Laravel:
+
+```bash
+php artisan queue:forget 91401d2c-0784-4f43-824c-34f94a33c24d
+```
+
+Пакет рассчитан на стандартное хранилище failed jobs Laravel и не реализует отдельные адаптеры удаления для нестандартных failed job providers.
+
+Массовое удаление намеренно не реализовано. Failed jobs являются операционными данными, и массовое удаление слишком легко использовать неправильно.
+
+## Безопасность
+
+Пакет открывает доступ к операционным действиям:
+
+- повтор failed jobs;
+- удаление записей из `failed_jobs`;
+- просмотр `payload`;
+- просмотр сообщений исключений.
+
+Не открывайте этот функционал каждому авторизованному пользователю. `auth` означает только то, что пользователь залогинен; это не проверка администратора.
+
+Рекомендуемая production-настройка:
+
+- standalone UI: `web`, `auth` и middleware администратора или permission;
+- Filament UI: Filament auth плюс Shield/permission доступ;
+- если используется только Filament, отключите standalone UI.
+
+Пример standalone middleware через permission:
+
+```php
+'ui' => [
+    'route' => [
+        'prefix' => 'failed-jobs-manager',
+        'middleware' => [
+            'web',
+            'auth',
+            'can:View:FailedJobsManagerPage',
+        ],
+    ],
+],
+```
+
+Пример, если в проекте есть свой middleware администратора:
+
+```php
+'ui' => [
+    'route' => [
+        'prefix' => 'failed-jobs-manager',
+        'middleware' => [
+            'web',
+            'auth',
+            'admin',
+        ],
+    ],
+],
+```
+
+Если страница используется только внутри Filament, standalone UI лучше выключить:
+
+```php
+'ui' => [
+    'enabled' => false,
+],
+```
+
+## История изменений
+
+Смотрите [CHANGELOG.ru.md](CHANGELOG.ru.md).
+
+## Лицензия
+
+MIT © Edward Tich

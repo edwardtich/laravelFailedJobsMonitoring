@@ -1,25 +1,27 @@
 <!doctype html>
-<html lang="ru">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>@yield('title', 'Failed jobs')</title>
+    <title>@yield('title', __('failed-jobs-manager::failed-jobs-manager.pages.index_title'))</title>
     <style>
         :root {
             color-scheme: light;
-            --fjm-bg: #f3f4f6;
+            --fjm-bg: #f8fafc;
             --fjm-panel: #ffffff;
-            --fjm-header: #111827;
-            --fjm-border: #e5e7eb;
-            --fjm-border-strong: #d1d5db;
-            --fjm-text: #111827;
-            --fjm-muted: #6b7280;
+            --fjm-border: #e2e8f0;
+            --fjm-border-strong: #cbd5e1;
+            --fjm-text: #0f172a;
+            --fjm-muted: #64748b;
             --fjm-soft: #f9fafb;
+            --fjm-primary: #d97706;
+            --fjm-primary-soft: #fffbeb;
             --fjm-blue: #2563eb;
-            --fjm-green: #059669;
+            --fjm-green: #16a34a;
             --fjm-red: #dc2626;
-            --fjm-orange: #ea580c;
-            --fjm-shadow: 0 10px 30px rgba(15, 23, 42, .08);
+            --fjm-orange: #d97706;
+            --fjm-shadow: 0 1px 2px rgba(15, 23, 42, .06);
+            --fjm-ring: 0 0 0 1px rgba(15, 23, 42, .05), 0 8px 24px rgba(15, 23, 42, .06);
         }
 
         * {
@@ -40,9 +42,9 @@
         }
 
         .fjm-topbar {
-            background: var(--fjm-header);
-            color: #ffffff;
-            border-bottom: 1px solid rgba(255, 255, 255, .08);
+            background: #ffffff;
+            color: var(--fjm-text);
+            border-bottom: 1px solid var(--fjm-border);
         }
 
         .fjm-topbar-inner {
@@ -64,14 +66,14 @@
         .fjm-brand-mark {
             width: 34px;
             height: 34px;
-            border-radius: 8px;
+            border-radius: 10px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, #ef4444, #f97316);
-            color: #ffffff;
+            background: var(--fjm-primary-soft);
+            color: #92400e;
             font-weight: 800;
-            box-shadow: 0 8px 18px rgba(239, 68, 68, .25);
+            border: 1px solid #fde68a;
         }
 
         .fjm-brand-title {
@@ -80,13 +82,13 @@
         }
 
         .fjm-brand-subtitle {
-            color: #9ca3af;
+            color: var(--fjm-muted);
             font-size: 12px;
             margin-top: 1px;
         }
 
         .fjm-topbar-meta {
-            color: #d1d5db;
+            color: var(--fjm-muted);
             font-size: 12px;
         }
 
@@ -106,8 +108,8 @@
 
         .fjm-title {
             margin: 0;
-            font-size: 28px;
-            font-weight: 700;
+            font-size: 24px;
+            font-weight: 650;
             letter-spacing: 0;
         }
 
@@ -120,10 +122,10 @@
         .fjm-panel {
             background: var(--fjm-panel);
             border: 1px solid var(--fjm-border);
-            border-radius: 8px;
+            border-radius: 12px;
             padding: 16px;
             margin-bottom: 16px;
-            box-shadow: var(--fjm-shadow);
+            box-shadow: var(--fjm-ring);
         }
 
         .fjm-message {
@@ -133,12 +135,25 @@
             margin-bottom: 16px;
             background: #eef6ff;
             color: #1e3a8a;
+            white-space: pre-wrap;
         }
 
         .fjm-message-success {
             background: #ecfdf3;
             border-color: #abefc6;
             color: #065f46;
+        }
+
+        .fjm-message-error {
+            background: #fef2f2;
+            border-color: #fecaca;
+            color: #991b1b;
+        }
+
+        .fjm-message-warning {
+            background: #fffbeb;
+            border-color: #fde68a;
+            color: #92400e;
         }
 
         .fjm-metrics {
@@ -151,7 +166,7 @@
         .fjm-metric {
             background: var(--fjm-panel);
             border: 1px solid var(--fjm-border);
-            border-radius: 8px;
+            border-radius: 12px;
             padding: 16px;
             box-shadow: var(--fjm-shadow);
         }
@@ -195,7 +210,7 @@
             width: 100%;
             min-height: 36px;
             border: 1px solid var(--fjm-border-strong);
-            border-radius: 6px;
+            border-radius: 8px;
             padding: 7px 9px;
             background: #ffffff;
             color: var(--fjm-text);
@@ -203,8 +218,8 @@
         }
 
         .fjm-control:focus {
-            border-color: var(--fjm-blue);
-            outline: 3px solid rgba(37, 99, 235, .12);
+            border-color: var(--fjm-primary);
+            outline: 3px solid rgba(217, 119, 6, .14);
         }
 
         textarea.fjm-control {
@@ -216,14 +231,31 @@
             background: #fbfdff;
         }
 
+        .fjm-preview-title {
+            color: var(--fjm-text);
+            font-weight: 700;
+        }
+
+        .fjm-preview-muted {
+            margin-top: 4px;
+            color: var(--fjm-muted);
+            font-size: 12px;
+        }
+
+        .fjm-preview-error {
+            max-width: 420px;
+            color: #991b1b;
+            font-weight: 600;
+        }
+
         .fjm-table-wrap {
             width: 100%;
             overflow-x: auto;
             background: var(--fjm-panel);
             border: 1px solid var(--fjm-border);
-            border-radius: 8px;
+            border-radius: 12px;
             margin-bottom: 16px;
-            box-shadow: var(--fjm-shadow);
+            box-shadow: var(--fjm-ring);
         }
 
         .fjm-table {
@@ -253,7 +285,7 @@
             font-weight: 700;
             text-transform: uppercase;
             white-space: nowrap;
-            background: #fbfdff;
+            background: #f8fafc;
         }
 
         .fjm-actions {
@@ -272,38 +304,47 @@
             align-items: center;
             justify-content: center;
             min-height: 34px;
-            border: 1px solid transparent;
-            border-radius: 6px;
+            border: 1px solid var(--fjm-border-strong);
+            border-radius: 8px;
             padding: 7px 10px;
-            color: #ffffff;
+            color: var(--fjm-text);
+            background: #ffffff;
             font: inherit;
             font-weight: 600;
             line-height: 1;
             text-decoration: none;
             cursor: pointer;
             white-space: nowrap;
-            transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease;
+            box-shadow: var(--fjm-shadow);
+            transition: background-color .12s ease, border-color .12s ease, color .12s ease;
         }
 
         .fjm-button:hover {
-            opacity: .92;
-            transform: translateY(-1px);
+            background: #f8fafc;
         }
 
         .fjm-button-blue {
-            background: var(--fjm-blue);
+            background: #eff6ff;
+            border-color: #bfdbfe;
+            color: #1d4ed8;
         }
 
         .fjm-button-green {
-            background: var(--fjm-green);
+            background: #f0fdf4;
+            border-color: #bbf7d0;
+            color: #15803d;
         }
 
         .fjm-button-orange {
-            background: var(--fjm-orange);
+            background: #fffbeb;
+            border-color: #fde68a;
+            color: #b45309;
         }
 
         .fjm-button-red {
-            background: var(--fjm-red);
+            background: #fef2f2;
+            border-color: #fecaca;
+            color: #b91c1c;
         }
 
         .fjm-pagination {
@@ -323,18 +364,86 @@
         .fjm-pre {
             overflow-x: auto;
             white-space: pre-wrap;
-            background: #0f172a;
-            color: #e5e7eb;
-            border-radius: 8px;
+            background: #f8fafc;
+            color: #334155;
+            border: 1px solid var(--fjm-border);
+            border-radius: 10px;
             padding: 14px;
             font-size: 12px;
             line-height: 1.55;
         }
 
-        .fjm-section-title {
-            margin: 22px 0 8px;
-            font-size: 14px;
+        .fjm-details {
+            background: var(--fjm-panel);
+            border: 1px solid var(--fjm-border);
+            border-radius: 12px;
+            margin-bottom: 16px;
+            box-shadow: var(--fjm-shadow);
+        }
+
+        .fjm-details summary {
+            cursor: pointer;
+            padding: 14px 16px;
+            color: var(--fjm-text);
             font-weight: 800;
+        }
+
+        .fjm-details-body {
+            border-top: 1px solid var(--fjm-border);
+            padding: 16px;
+        }
+
+        .fjm-detail-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(220px, 1fr));
+            gap: 14px;
+            margin-bottom: 16px;
+        }
+
+        .fjm-detail-card {
+            background: var(--fjm-panel);
+            border: 1px solid var(--fjm-border);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: var(--fjm-ring);
+        }
+
+        .fjm-detail-card-danger {
+            border-color: #fecaca;
+            background: #fffafa;
+        }
+
+        .fjm-kv {
+            display: grid;
+            grid-template-columns: 140px minmax(0, 1fr);
+            gap: 8px 14px;
+            margin: 0;
+        }
+
+        .fjm-kv dt {
+            color: var(--fjm-muted);
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .fjm-kv dd {
+            min-width: 0;
+            margin: 0;
+            overflow-wrap: anywhere;
+        }
+
+        .fjm-exception-message {
+            color: #991b1b;
+            font-size: 16px;
+            font-weight: 800;
+            overflow-wrap: anywhere;
+        }
+
+        .fjm-section-title {
+            margin: 0 0 12px;
+            font-size: 13px;
+            font-weight: 700;
             text-transform: uppercase;
             color: var(--fjm-muted);
         }
@@ -345,8 +454,8 @@
             min-height: 24px;
             border-radius: 999px;
             padding: 3px 9px;
-            background: #fee2e2;
-            color: #991b1b;
+            background: #f1f5f9;
+            color: #475569;
             font-size: 12px;
             font-weight: 700;
         }
@@ -380,6 +489,14 @@
                 grid-template-columns: 1fr;
             }
 
+            .fjm-detail-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .fjm-kv {
+                grid-template-columns: 1fr;
+            }
+
             .fjm-pagination {
                 align-items: flex-start;
                 flex-direction: column;
@@ -393,18 +510,18 @@
         <div class="fjm-brand">
             <span class="fjm-brand-mark">FJ</span>
             <div>
-                <div class="fjm-brand-title">Failed Jobs Manager</div>
-                <div class="fjm-brand-subtitle">Laravel queue failure control</div>
+                <div class="fjm-brand-title">{{ __('failed-jobs-manager::failed-jobs-manager.brand') }}</div>
+                <div class="fjm-brand-subtitle">{{ __('failed-jobs-manager::failed-jobs-manager.brand_subtitle') }}</div>
             </div>
         </div>
-        <div class="fjm-topbar-meta">Standard failed_jobs table</div>
+        <div class="fjm-topbar-meta">{{ __('failed-jobs-manager::failed-jobs-manager.topbar_meta') }}</div>
     </div>
 </div>
 <main class="fjm-page">
     <header class="fjm-header">
         <div>
-            <h1 class="fjm-title">@yield('title', 'Failed jobs')</h1>
-            <div class="fjm-subtitle">@yield('subtitle', 'Review, retry, and clean failed queue jobs')</div>
+            <h1 class="fjm-title">@yield('title', __('failed-jobs-manager::failed-jobs-manager.pages.index_title'))</h1>
+            <div class="fjm-subtitle">@yield('subtitle', __('failed-jobs-manager::failed-jobs-manager.pages.default_subtitle'))</div>
         </div>
     </header>
 

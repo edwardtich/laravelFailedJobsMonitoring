@@ -17,7 +17,16 @@ class FailedJobsManagerProvider extends ServiceProvider
             $this->publishes([
                 __DIR__ . '/../../views' => resource_path('views/vendor/failed-jobs-manager'),
             ], 'views');
+
+            $this->publishes([
+                __DIR__ . '/../../lang' => lang_path('vendor/failed-jobs-manager'),
+            ], 'translations');
         }
+
+        $this->loadTranslationsFrom(
+            __DIR__ . '/../../lang',
+            'failed-jobs-manager'
+        );
 
         $this->loadViewsFrom(
             __DIR__ . '/../../views',
@@ -33,11 +42,13 @@ class FailedJobsManagerProvider extends ServiceProvider
 
     public function register(): void
     {
-        if ( ! $this->app->configurationIsCached()) {
-            $this->mergeConfigFrom(
-                __DIR__ . '/../../config/failed-jobs-manager.php',
-                'failed-jobs-manager'
-            );
-        }
+        $this->mergeRecursiveConfigFrom(__DIR__ . '/../../config/failed-jobs-manager.php', 'failed-jobs-manager');
+    }
+
+    private function mergeRecursiveConfigFrom(string $path, string $key): void
+    {
+        $config = $this->app['config'];
+
+        $config->set($key, array_replace_recursive(require $path, $config->get($key, [])));
     }
 }
