@@ -2,13 +2,16 @@
 
 namespace EdwardTich\FailedJobsManager\Filament\Pages;
 
+use EdwardTich\FailedJobsManager\Authorization\FailedJobsManagerAuthorization;
 use EdwardTich\FailedJobsManager\Models\FailedJob;
 use EdwardTich\FailedJobsManager\Queries\FailedJobQuery;
 use EdwardTich\FailedJobsManager\Services\FailedJobDeleteService;
+use EdwardTich\FailedJobsManager\Services\FailedJobsManagerAuditDispatcher;
 use EdwardTich\FailedJobsManager\Services\FailedJobRetryService;
 use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Livewire\WithPagination;
@@ -82,17 +85,6 @@ class FailedJobsManagerPage extends Page
         return (bool) config('failed-jobs-manager.filament.register_navigation', true);
     }
 
-    public static function registerNavigationItems(): void
-    {
-        if (! static::shouldRegisterNavigation() || ! static::canAccess()) {
-            return;
-        }
-
-        $panel = Filament::getCurrentPanel() ?? Filament::getDefaultPanel();
-
-        $panel?->navigationItems(static::getNavigationItems());
-    }
-
     public static function canAccess(): bool
     {
         $user = Filament::auth()?->user();
@@ -104,23 +96,24 @@ class FailedJobsManagerPage extends Page
         $permission = static::getConfiguredPermission();
 
         if ($permission && $user->can($permission)) {
-            return true;
+            return static::canPerform($user, FailedJobsManagerAuthorization::VIEW);
         }
 
         $roles = array_filter((array) config('failed-jobs-manager.filament.roles', ['super_admin']));
 
         if ($roles === []) {
-            return true;
+            return static::canPerform($user, FailedJobsManagerAuthorization::VIEW);
         }
 
         if (method_exists($user, 'hasAnyRole')) {
-            return (bool) $user->hasAnyRole($roles);
+            return (bool) $user->hasAnyRole($roles)
+                && static::canPerform($user, FailedJobsManagerAuthorization::VIEW);
         }
 
         if (method_exists($user, 'hasRole')) {
             foreach ($roles as $role) {
                 if ($user->hasRole($role)) {
-                    return true;
+                    return static::canPerform($user, FailedJobsManagerAuthorization::VIEW);
                 }
             }
         }
@@ -165,15 +158,22 @@ class FailedJobsManagerPage extends Page
     public function retry(int $id): void
     {
         abort_unless(config('failed-jobs-manager.ui.allow_retry'), 403);
+        $this->authorizeAbility(FailedJobsManagerAuthorization::RETRY);
 
         $failedJob = FailedJob::query()->findOrFail($id);
 
         $retryService = app(FailedJobRetryService::class);
-        $result = $retryService->retryByFailedJobIds([$failedJob->id]);
+        $result = $retryService->retryByFailedJobIdsWithResult([$failedJob->id]);
+
+        app(FailedJobsManagerAuditDispatcher::class)->retried(
+            $result->retriedFailedJobIds(),
+            Filament::auth()?->user(),
+            request()->ip(),
+        );
 
         $this->selectedJobs = array_values(array_diff($this->selectedJobs, [$id]));
 
-        if (! $result) {
+        if (! $result->isSuccessful()) {
             Notification::make()
                 ->title(__('failed-jobs-manager::failed-jobs-manager.flash.retry_failed'))
                 ->danger()
@@ -191,19 +191,39 @@ class FailedJobsManagerPage extends Page
     public function retrySelected(): void
     {
         abort_unless(config('failed-jobs-manager.ui.allow_retry'), 403);
+        $this->authorizeAbility(FailedJobsManagerAuthorization::RETRY);
 
-        $selectedJobs = array_values(array_unique(array_map('intval', $this->selectedJobs)));
+        $selectedJobs = array_slice(
+            array_values(array_unique(array_map('intval', $this->selectedJobs))),
+            0,
+            max(1, (int) config('failed-jobs-manager.ui.retry_max_ids', 1000)),
+        );
 
         if ($selectedJobs === []) {
             return;
         }
 
         $retryService = app(FailedJobRetryService::class);
-        $result = $retryService->retryByFailedJobIds($selectedJobs);
+        $result = $retryService->retryByFailedJobIdsWithResult($selectedJobs);
+
+        app(FailedJobsManagerAuditDispatcher::class)->retried(
+            $result->retriedFailedJobIds(),
+            Filament::auth()?->user(),
+            request()->ip(),
+        );
 
         $this->selectedJobs = [];
 
-        if (! $result) {
+        if ($result->isPartiallySuccessful()) {
+            Notification::make()
+                ->title(__('failed-jobs-manager::failed-jobs-manager.flash.bulk_retry_partially_sent'))
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        if (! $result->isSuccessful()) {
             Notification::make()
                 ->title(__('failed-jobs-manager::failed-jobs-manager.flash.retry_failed'))
                 ->danger()
@@ -221,6 +241,7 @@ class FailedJobsManagerPage extends Page
     public function toggleCurrentPageSelection(): void
     {
         abort_unless(config('failed-jobs-manager.ui.allow_retry'), 403);
+        $this->authorizeAbility(FailedJobsManagerAuthorization::RETRY);
 
         $currentPageJobIds = $this->currentPageJobIds();
 
@@ -242,6 +263,7 @@ class FailedJobsManagerPage extends Page
     public function delete(int $id): void
     {
         abort_unless(config('failed-jobs-manager.ui.allow_delete'), 403);
+        $this->authorizeAbility(FailedJobsManagerAuthorization::DELETE);
 
         $failedJob = FailedJob::query()->findOrFail($id);
 
@@ -259,6 +281,12 @@ class FailedJobsManagerPage extends Page
             return;
         }
 
+        app(FailedJobsManagerAuditDispatcher::class)->deleted(
+            $failedJob,
+            Filament::auth()?->user(),
+            request()->ip(),
+        );
+
         Notification::make()
             ->title(__('failed-jobs-manager::failed-jobs-manager.flash.deleted'))
             ->success()
@@ -271,10 +299,12 @@ class FailedJobsManagerPage extends Page
     protected function getViewData(): array
     {
         $filters = $this->filters();
-        $query = app(FailedJobQuery::class)->list($filters);
-        $isFilterApplied = collect($filters)->filter(static fn ($value) => $value !== null && $value !== '')->isNotEmpty();
-        $jobs = $query->paginate(
-            perPage: (int) config('failed-jobs-manager.ui.per_page'),
+        $failedJobQuery = app(FailedJobQuery::class);
+        $authorization = app(FailedJobsManagerAuthorization::class);
+        $user = Filament::auth()?->user();
+        $isFilterApplied = array_filter($filters) !== [];
+        $jobs = $failedJobQuery->list($filters, $this->canSearchPayload())->paginate(
+            perPage: $this->perPage(),
             pageName: 'page',
             page: $this->getPage()
         );
@@ -283,9 +313,11 @@ class FailedJobsManagerPage extends Page
 
         return [
             'jobs' => $jobs,
-            'queues' => app(FailedJobQuery::class)->queues()->pluck('queue', 'queue')->toArray(),
-            'filteredJobsCount' => $isFilterApplied ? (clone $query)->count() : null,
+            'queues' => $failedJobQuery->queueOptions(),
+            'filteredJobsCount' => $isFilterApplied ? $jobs->total() : null,
             'isFilterApplied' => $isFilterApplied,
+            'canRetry' => $authorization->canOperate($user, FailedJobsManagerAuthorization::RETRY),
+            'canDelete' => $authorization->canOperate($user, FailedJobsManagerAuthorization::DELETE),
             'allCurrentPageJobsSelected' => $currentPageJobIds !== [] && array_diff($currentPageJobIds, $selectedJobs) === [],
         ];
     }
@@ -355,19 +387,36 @@ class FailedJobsManagerPage extends Page
         return $page ? array_key_first($page['permissions']) : null;
     }
 
+    private static function canPerform(?Authenticatable $user, string $ability): bool
+    {
+        return app(FailedJobsManagerAuthorization::class)->can($user, $ability);
+    }
+
+    private function authorizeAbility(string $ability): void
+    {
+        abort_unless(static::canAccess(), 403);
+
+        app(FailedJobsManagerAuthorization::class)->authorize(Filament::auth()?->user(), $ability);
+    }
+
+    private function canSearchPayload(): bool
+    {
+        return static::canPerform(Filament::auth()?->user(), FailedJobsManagerAuthorization::VIEW_SENSITIVE_PAYLOAD);
+    }
+
+    private function perPage(): int
+    {
+        return max(1, (int) config('failed-jobs-manager.ui.per_page', 20));
+    }
+
     /**
      * @return array<int, int>
      */
     private function currentPageJobIds(): array
     {
         return app(FailedJobQuery::class)
-            ->list($this->filters())
-            ->paginate(
-                perPage: (int) config('failed-jobs-manager.ui.per_page'),
-                pageName: 'page',
-                page: $this->getPage()
-            )
-            ->getCollection()
+            ->list($this->filters(), $this->canSearchPayload())
+            ->forPage($this->getPage(), $this->perPage())
             ->pluck('id')
             ->map(static fn ($id) => (int) $id)
             ->all();

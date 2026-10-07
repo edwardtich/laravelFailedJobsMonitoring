@@ -2,7 +2,7 @@
     <table class="fjm-table">
         <thead>
         <tr>
-            @if(config('failed-jobs-manager.ui.allow_retry'))
+            @if($canRetry)
                 <th>
                     <input type="checkbox" onclick="document.querySelectorAll('input[name=&quot;ids[]&quot;]').forEach(function (checkbox) { checkbox.checked = this.checked; }.bind(this))">
                 </th>
@@ -18,13 +18,13 @@
         <tbody>
         @forelse($jobs as $job)
             <tr>
-                @if(config('failed-jobs-manager.ui.allow_retry'))
+                @if($canRetry)
                     <td>
                         <input type="checkbox" name="ids[]" value="{{ $job->id }}" form="failed-jobs-bulk-retry-form">
                     </td>
                 @endif
                 <td><span class="fjm-id">{{ $job->id }}</span></td>
-                <td><span class="fjm-badge">{{ $job->queue ?: 'default' }}</span></td>
+                <td><span class="fjm-badge">{{ $job->queue ?: __('failed-jobs-manager::failed-jobs-manager.details.default_queue') }}</span></td>
                 <td>
                     @php($payload = $job->payloadDetails())
                     <div class="fjm-preview-title">{{ $payload->shortJobName() }}</div>
@@ -40,7 +40,7 @@
                             {{ __('failed-jobs-manager::failed-jobs-manager.actions.details') }}
                         </a>
 
-                        @if(config('failed-jobs-manager.ui.allow_retry'))
+                        @if($canRetry)
                             <form action="{{ route('failed-jobs-manager::retry', $job->id) }}" method="post" class="fjm-inline-form">
                                 @csrf
                                 @method('patch')
@@ -50,11 +50,11 @@
                             </form>
                         @endif
 
-                        @if(config('failed-jobs-manager.ui.allow_delete'))
+                        @if($canDelete)
                             <form action="{{ route('failed-jobs-manager::destroy', $job->id) }}" method="post" class="fjm-inline-form">
                                 @csrf
                                 @method('delete')
-                                <button type="submit" class="fjm-button fjm-button-red" onclick="return confirm('{{ __('failed-jobs-manager::failed-jobs-manager.actions.delete_confirm') }}')">
+                                <button type="submit" class="fjm-button fjm-button-red" onclick="return confirm(@js(__('failed-jobs-manager::failed-jobs-manager.actions.delete_confirm')))">
                                     {{ __('failed-jobs-manager::failed-jobs-manager.actions.delete') }}
                                 </button>
                             </form>

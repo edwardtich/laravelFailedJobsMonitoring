@@ -86,6 +86,7 @@ return [
         'delete_failed' => 'Unable to delete record',
         'retry_sent' => 'Job sent to retry',
         'bulk_retry_sent' => 'Jobs sent to retry',
+        'bulk_retry_partially_sent' => 'Some jobs were sent to retry before an error occurred',
         'retry_failed' => 'Unable to send job to retry',
     ],
 ];

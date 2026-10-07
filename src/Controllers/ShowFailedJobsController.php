@@ -2,15 +2,20 @@
 
 namespace EdwardTich\FailedJobsManager\Controllers;
 
+use EdwardTich\FailedJobsManager\Authorization\FailedJobsManagerAuthorization;
 use EdwardTich\FailedJobsManager\Queries\FailedJobQuery;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class ShowFailedJobsController
 {
-    public function __invoke(Request $request, FailedJobQuery $failedJobQuery): View
+    public function __invoke(
+        Request $request,
+        FailedJobQuery $failedJobQuery,
+        FailedJobsManagerAuthorization $authorization,
+    ): View
     {
-        $filters = $request->validate([
+        $filters = array_filter($request->validate([
             'queue' => [
                 'nullable',
                 'string',
@@ -30,26 +35,24 @@ class ShowFailedJobsController
                 'date_format:Y-m-d',
                 'after_or_equal:failed_from',
             ],
+        ]), static fn ($value) => $value !== null && $value !== '');
+
+        $searchPayload = $authorization->can($request->user(), FailedJobsManagerAuthorization::VIEW_SENSITIVE_PAYLOAD);
+
+        $jobs = $failedJobQuery
+            ->list($filters, $searchPayload)
+            ->paginate((int) config('failed-jobs-manager.ui.per_page', 20))
+            ->appends($filters);
+
+        $isFilterApplied = $filters !== [];
+
+        return view('failed-jobs-manager::jobs', [
+            'jobs' => $jobs,
+            'queues' => $failedJobQuery->queueOptions(),
+            'filteredJobsCount' => $isFilterApplied ? $jobs->total() : null,
+            'isFilterApplied' => $isFilterApplied,
+            'canRetry' => $authorization->canOperate($request->user(), FailedJobsManagerAuthorization::RETRY),
+            'canDelete' => $authorization->canOperate($request->user(), FailedJobsManagerAuthorization::DELETE),
         ]);
-
-        $query = $failedJobQuery->list($filters);
-        $isFilterApplied = collect($filters)->filter(static fn ($value) => $value !== null && $value !== '')->isNotEmpty();
-        $filteredJobsCount = $isFilterApplied ? (clone $query)->count() : null;
-
-        $jobs = $query
-            ->paginate(config('failed-jobs-manager.ui.per_page'))
-            ->appends($request->query());
-
-        $queues = $failedJobQuery
-            ->queues()
-            ->pluck('queue', 'queue')
-            ->toArray();
-
-        return view('failed-jobs-manager::jobs', compact(
-            'jobs',
-            'queues',
-            'filteredJobsCount',
-            'isFilterApplied'
-        ));
     }
 }

@@ -429,7 +429,7 @@
             </div>
         </div>
 
-        @if(config('failed-jobs-manager.ui.allow_retry'))
+        @if($canRetry)
             <div class="fjm-toolbar">
                 <x-filament::button
                     color="warning"
@@ -451,7 +451,7 @@
             <table class="fjm-table">
                 <thead>
                     <tr>
-                        @if(config('failed-jobs-manager.ui.allow_retry'))
+                        @if($canRetry)
                             <th class="fjm-col-check">
                                 <input
                                     type="checkbox"
@@ -474,7 +474,7 @@
                         @php($exception = $job->exceptionDetails())
 
                         <tr>
-                            @if(config('failed-jobs-manager.ui.allow_retry'))
+                            @if($canRetry)
                                 <td>
                                     <input type="checkbox" wire:model.live="selectedJobs" value="{{ $job->id }}">
                                 </td>
@@ -492,18 +492,18 @@
                                 </div>
                             </td>
                             <td>
-                                <div class="fjm-exception">{{ $exception->message() }}</div>
+                                <div class="fjm-exception">{{ $exception->safeMessage() }}</div>
                             </td>
                             <td>{{ $job->failed_at?->format('d.m.Y H:i:s') }}</td>
                             <td>
                                 <div class="fjm-actions">
-                                    @if(config('failed-jobs-manager.ui.allow_retry'))
+                                    @if($canRetry)
                                         <x-filament::button size="sm" color="warning" wire:click="retry({{ $job->id }})">
                                             {{ __('failed-jobs-manager::failed-jobs-manager.actions.retry') }}
                                         </x-filament::button>
                                     @endif
 
-                                    @if(config('failed-jobs-manager.ui.allow_delete'))
+                                    @if($canDelete)
                                         <x-filament::button
                                             size="sm"
                                             color="danger"
@@ -517,7 +517,7 @@
                             </td>
                         </tr>
                         <tr class="fjm-details-row">
-                            <td colspan="{{ config('failed-jobs-manager.ui.allow_retry') ? 7 : 6 }}">
+                            <td colspan="{{ $canRetry ? 7 : 6 }}">
                                 <details class="fjm-details">
                                     <summary>
                                         {{ __('failed-jobs-manager::failed-jobs-manager.details.payload_summary') }}
@@ -540,7 +540,7 @@
 
                                             <div class="fjm-summary-section">
                                                 <h3 class="fjm-section-title">{{ __('failed-jobs-manager::failed-jobs-manager.details.exception_summary') }}</h3>
-                                                <div class="fjm-exception" style="margin-bottom: .7rem;">{{ $exception->message() }}</div>
+                                                <div class="fjm-exception" style="margin-bottom: .7rem;">{{ $exception->safeMessage() }}</div>
                                                 <dl>
                                                     @foreach($exception->summary() as $label => $value)
                                                         <div class="fjm-definition">
@@ -557,7 +557,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="{{ config('failed-jobs-manager.ui.allow_retry') ? 7 : 6 }}">
+                            <td colspan="{{ $canRetry ? 7 : 6 }}">
                                 <div class="fjm-empty">{{ __('failed-jobs-manager::failed-jobs-manager.table.empty') }}</div>
                             </td>
                         </tr>

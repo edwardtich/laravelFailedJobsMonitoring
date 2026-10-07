@@ -42,8 +42,9 @@ php artisan queue:retry 42694 42695 42696
 
 ## Требования
 
-- PHP 8.2+
-- Laravel 11 или 12
+- PHP 8.3+
+- Laravel 12 или 13
+- Filament 4 или 5 (только для интеграции с Filament)
 - настроенная таблица `failed_jobs`
 - настроенный Laravel failed job provider для очередей
 - Filament нужен только для Filament-интеграции
@@ -114,7 +115,8 @@ config/failed-jobs-manager.php
 
 ```php
 return [
-    'table' => 'failed_jobs',
+    // null — берётся из queue.failed.table / queue.failed.database
+    'table' => null,
     'connection' => null,
 
     'ui' => [
@@ -132,9 +134,24 @@ return [
         'allow_retry' => true,
         'allow_delete' => true,
         'retry_key' => 'auto',
+        'retry_chunk_size' => 100,
+        'retry_max_ids' => 1000,
+        'retry_lock_seconds' => 60,
+        'queues_cache_ttl' => 60,
         'search_max_length' => 120,
         'payload_preview_length' => 300,
         'exception_preview_length' => 500,
+    ],
+
+    'authorization' => [
+        'gate' => 'viewFailedJobsManager',
+
+        'permissions' => [
+            'view' => null,
+            'retry' => null,
+            'delete' => null,
+            'view_sensitive_payload' => null,
+        ],
     ],
 
     'filament' => [
@@ -170,9 +187,16 @@ URL по умолчанию:
 ],
 ```
 
-В production не оставляйте доступ только по `auth`. Страница умеет перезапускать задания, удалять записи и показывать `payload` / `exception`, поэтому доступ должен быть ограничен администраторами или отдельным permission.
+`auth` означает только то, что пользователь залогинен. Поэтому вне окружения `local` standalone UI по умолчанию закрыт, пока вы не определите gate `viewFailedJobsManager` (как в Horizon и Telescope) или не настроите `authorization.permissions.view`:
 
-Пример с role middleware:
+```php
+use Illuminate\Support\Facades\Gate;
+
+// AppServiceProvider::boot()
+Gate::define('viewFailedJobsManager', fn ($user) => $user->isAdmin());
+```
+
+Middleware можно использовать как дополнительный слой, например с ролями:
 
 ```php
 'route' => [
@@ -213,6 +237,25 @@ public function panel(Panel $panel): Panel
         ]);
 }
 ```
+
+## Права на действия
+
+Route middleware и доступ к странице Filament определяют, кто может открыть менеджер. Следующие необязательные permissions определяют, какие действия этот пользователь может выполнять:
+
+```php
+'authorization' => [
+    'permissions' => [
+        'view' => 'failed-jobs.view',
+        'retry' => 'failed-jobs.retry',
+        'delete' => 'failed-jobs.delete',
+        'view_sensitive_payload' => 'failed-jobs.view-sensitive-payload',
+    ],
+],
+```
+
+`retry` и `delete` дополнительно требуют `view`. Если permission действия равен `null`, пакет сохраняет прежнее поведение на основе доступа к странице. `view_sensitive_payload` запрещен, пока ему явно не задан permission.
+
+Так оператор может смотреть failed jobs, но не сможет их перезапускать или удалять. Sensitive permission открывает сериализованную команду и полный raw payload / exception — выдавать его всем нельзя.
 
 Если панель доступна по пути `/admin`, страница будет доступна по адресу:
 
@@ -335,6 +378,8 @@ $user->can($permission);
 
 `roles` используется только как fallback. Это удобно, например, для `super_admin` до генерации или назначения Shield permissions, но основную проверку доступа в production лучше держать через permission.
 
+Permission страницы Filament контролирует только вход на страницу. Дополнительно настройте permissions действий из предыдущего раздела: одного `View:*` недостаточно для оператора, который должен делать retry или delete.
+
 После регистрации страницы можно сгенерировать права Shield:
 
 ```bash
@@ -391,11 +436,11 @@ failed-jobs-manager::failed-jobs-manager
 ],
 ```
 
-Фильтр поиска проверяет `payload` и `exception` через wildcard `LIKE`. Это нормально для операционного просмотра, но не надо притворяться, что это инструмент аналитики для больших объемов.
+Поиск ищет точное совпадение по `uuid` и по тексту `exception`. По `payload` ищут только пользователи с правом `view_sensitive_payload`: иначе поиск позволял бы восстановить скрытое содержимое payload подбором подстрок. `%` и `_` ищутся буквально. Поиск работает через `LIKE '%...%'`, так что это инструмент операционного просмотра, а не аналитики на больших объёмах.
 
 ## Ключ повтора
 
-В разных версиях Laravel повтор failed jobs может работать по разным идентификаторам. Старые проекты чаще используют числовой `id`, новые могут использовать `uuid`.
+Провайдеры failed jobs в Laravel ищут задачи по разным идентификаторам: драйвер `database` — по числовому `id`, драйвер `database-uuids` — по `uuid`.
 
 Настройка ключа повтора:
 
@@ -407,7 +452,7 @@ failed-jobs-manager::failed-jobs-manager
 
 Доступные значения:
 
-- `auto` - использовать `uuid`, если он есть, иначе `id`;
+- `auto` - `uuid` для драйвера `database-uuids`, иначе `id` (драйвер `database` или драйвер не задан);
 - `id` - всегда вызывать команды очередей с ID записи;
 - `uuid` - вызывать команды очередей с UUID, fallback на ID, если UUID пустой.
 
@@ -458,21 +503,19 @@ php artisan queue:forget 91401d2c-0784-4f43-824c-34f94a33c24d
 
 Рекомендуемая production-настройка:
 
-- standalone UI: `web`, `auth` и middleware администратора или permission;
+- standalone UI: `web`, `auth` и gate `viewFailedJobsManager` или permission `view`;
 - Filament UI: Filament auth плюс Shield/permission доступ;
 - если используется только Filament, отключите standalone UI.
 
-Пример standalone middleware через permission:
+Пример permissions для standalone UI:
 
 ```php
-'ui' => [
-    'route' => [
-        'prefix' => 'failed-jobs-manager',
-        'middleware' => [
-            'web',
-            'auth',
-            'can:View:FailedJobsManagerPage',
-        ],
+'authorization' => [
+    'permissions' => [
+        'view' => 'failed-jobs.view',
+        'retry' => 'failed-jobs.retry',
+        'delete' => 'failed-jobs.delete',
+        'view_sensitive_payload' => 'failed-jobs.view-sensitive-payload',
     ],
 ],
 ```
@@ -499,6 +542,14 @@ php artisan queue:forget 91401d2c-0784-4f43-824c-34f94a33c24d
     'enabled' => false,
 ],
 ```
+
+Raw payload скрыт, пока не настроен и не выдан `authorization.permissions.view_sensitive_payload`. В summary exception маскируются распространенные названия секретов: `token`, `secret`, `password`, `api_key`. Это дополнительная защита, а не замена корректных прав доступа.
+
+Retry загружает задачи чанками по `ui.retry_chunk_size`, один запрос принимает не больше `ui.retry_max_ids` задач. Каждая задача перезапускается под cache lock (`ui.retry_lock_seconds`) с повторной проверкой внутри блокировки, поэтому двойной клик или два оператора не отправят одну задачу в очередь дважды. Ошибки очереди уходят в exception handler и показываются как неудачный retry, а не HTTP 500.
+
+Список очередей в фильтре кешируется на `ui.queues_cache_ttl` секунд (`0` отключает кеш), потому что `SELECT DISTINCT queue` сканирует всю таблицу.
+
+После успешных операций пакет отправляет события `FailedJobsRetried` и `FailedJobDeleted`. В них есть идентификаторы jobs и контекст пользователя, но нет raw payload. Хост-приложение должно само подключить listener для audit log.
 
 ## История изменений
 

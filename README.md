@@ -42,8 +42,9 @@ php artisan queue:retry 42694 42695 42696
 
 ## Requirements
 
-- PHP 8.2+
-- Laravel 11 or 12
+- PHP 8.3+
+- Laravel 12 or 13
+- Filament 4 or 5 (only for the Filament integration)
 - configured `failed_jobs` table
 - configured Laravel queue failed job provider
 - Filament is required only for Filament integration
@@ -114,7 +115,8 @@ Default configuration:
 
 ```php
 return [
-    'table' => 'failed_jobs',
+    // null uses queue.failed.table / queue.failed.database
+    'table' => null,
     'connection' => null,
 
     'ui' => [
@@ -132,9 +134,24 @@ return [
         'allow_retry' => true,
         'allow_delete' => true,
         'retry_key' => 'auto',
+        'retry_chunk_size' => 100,
+        'retry_max_ids' => 1000,
+        'retry_lock_seconds' => 60,
+        'queues_cache_ttl' => 60,
         'search_max_length' => 120,
         'payload_preview_length' => 300,
         'exception_preview_length' => 500,
+    ],
+
+    'authorization' => [
+        'gate' => 'viewFailedJobsManager',
+
+        'permissions' => [
+            'view' => null,
+            'retry' => null,
+            'delete' => null,
+            'view_sensitive_payload' => null,
+        ],
     ],
 
     'filament' => [
@@ -170,9 +187,16 @@ By default, the route uses these middleware:
 ],
 ```
 
-In production, do not leave access protected only by `auth`. This page can retry jobs, delete records, and show `payload` / `exception`, so access should be restricted to admins or a dedicated permission.
+`auth` only proves that the user is logged in. Access to the standalone UI is therefore closed by default outside the `local` environment until you either define the `viewFailedJobsManager` gate (the same approach as Horizon and Telescope) or configure `authorization.permissions.view`:
 
-Example with role middleware:
+```php
+use Illuminate\Support\Facades\Gate;
+
+// AppServiceProvider::boot()
+Gate::define('viewFailedJobsManager', fn ($user) => $user->isAdmin());
+```
+
+Middleware can still be used as an additional layer, for example with roles:
 
 ```php
 'route' => [
@@ -213,6 +237,25 @@ public function panel(Panel $panel): Panel
         ]);
 }
 ```
+
+## Action Permissions
+
+Route middleware and Filament page access determine who can open the manager. The optional permissions below determine which operations that user may perform:
+
+```php
+'authorization' => [
+    'permissions' => [
+        'view' => 'failed-jobs.view',
+        'retry' => 'failed-jobs.retry',
+        'delete' => 'failed-jobs.delete',
+        'view_sensitive_payload' => 'failed-jobs.view-sensitive-payload',
+    ],
+],
+```
+
+`retry` and `delete` also require `view`. When an operation permission is `null`, the package keeps the existing page-access behavior for backward compatibility. `view_sensitive_payload` is denied until an explicit permission is configured.
+
+This lets an operator inspect failed jobs without being allowed to retry or delete them. The sensitive permission reveals the serialized command and full raw payload / exception; do not assign it broadly.
 
 If your panel path is `/admin`, the page will be available at:
 
@@ -335,6 +378,8 @@ $user->can($permission);
 
 `roles` is only used as a fallback. This is useful for roles like `super_admin` before Shield permissions are generated or assigned, but production access should preferably be permission-based.
 
+The Filament page permission controls access to the page itself. Configure the operation permissions from the previous section as well; a `View:*` permission must not be the only permission assigned to an operator who should retry or delete jobs.
+
 After registering the page, generate Shield permissions:
 
 ```bash
@@ -391,11 +436,11 @@ Search is limited before querying the database:
 ],
 ```
 
-The search filter checks `payload` and `exception` with a wildcard `LIKE` query. Keep it for operational inspection, not for high-volume analytics.
+The search filter matches the exact `uuid` and the `exception` text. The `payload` is searched only for users with the `view_sensitive_payload` permission, otherwise the search would let anyone reveal hidden payload content by guessing substrings. `%` and `_` are matched literally. The search uses a `LIKE '%...%'` query, so keep it for operational inspection, not for high-volume analytics.
 
 ## Retry Key
 
-Different Laravel versions can retry failed jobs by different identifiers. Older projects usually use numeric `id`, while newer projects may use `uuid`.
+Laravel's failed job providers look jobs up by different identifiers: the `database` driver uses the numeric `id`, the `database-uuids` driver uses `uuid`.
 
 Retry key configuration:
 
@@ -407,7 +452,7 @@ Retry key configuration:
 
 Available values:
 
-- `auto` - use `uuid` when it exists, otherwise use `id`;
+- `auto` - `uuid` for the `database-uuids` failed job driver, `id` otherwise (`database` driver or no driver set);
 - `id` - always call queue commands with the failed job ID;
 - `uuid` - call queue commands with UUID, fallback to ID when UUID is empty.
 
@@ -458,21 +503,19 @@ Do not expose this functionality to every authenticated user. `auth` only means 
 
 Recommended production setup:
 
-- standalone UI: `web`, `auth`, and admin/permission middleware;
+- standalone UI: `web`, `auth`, and the `viewFailedJobsManager` gate or the `view` permission;
 - Filament UI: Filament auth plus Shield/permission access;
 - if you use only Filament, disable the standalone UI.
 
-Standalone middleware example with permission:
+Standalone permission example:
 
 ```php
-'ui' => [
-    'route' => [
-        'prefix' => 'failed-jobs-manager',
-        'middleware' => [
-            'web',
-            'auth',
-            'can:View:FailedJobsManagerPage',
-        ],
+'authorization' => [
+    'permissions' => [
+        'view' => 'failed-jobs.view',
+        'retry' => 'failed-jobs.retry',
+        'delete' => 'failed-jobs.delete',
+        'view_sensitive_payload' => 'failed-jobs.view-sensitive-payload',
     ],
 ],
 ```
@@ -499,6 +542,14 @@ If the page is used only inside Filament, disable the standalone UI:
     'enabled' => false,
 ],
 ```
+
+Raw payloads are hidden unless `authorization.permissions.view_sensitive_payload` is explicitly configured and assigned. Exception summaries redact common credential names such as `token`, `secret`, `password`, and `api_key`; this is a safety measure, not a replacement for access control.
+
+Retry requests are loaded in `ui.retry_chunk_size` chunks, and one request accepts at most `ui.retry_max_ids` jobs. Every job is retried under a cache lock (`ui.retry_lock_seconds`) and is re-checked inside the lock, so a double click or two operators retrying the same job do not push it onto the queue twice. Queue errors are reported through the exception handler and shown as a failed retry instead of an HTTP 500.
+
+The list of queues in the filter is cached for `ui.queues_cache_ttl` seconds (`0` disables caching), because `SELECT DISTINCT queue` scans the whole table.
+
+The package dispatches `FailedJobsRetried` and `FailedJobDeleted` events after successful operations. Events contain job identifiers and actor context, never raw payloads; the host application should attach its own audit-log listener.
 
 ## Changelog
 

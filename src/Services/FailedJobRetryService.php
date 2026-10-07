@@ -3,7 +3,11 @@
 namespace EdwardTich\FailedJobsManager\Services;
 
 use EdwardTich\FailedJobsManager\Models\FailedJob;
+use EdwardTich\FailedJobsManager\Support\FailedJobRetryResult;
+use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
+use Throwable;
 
 class FailedJobRetryService
 {
@@ -12,28 +16,54 @@ class FailedJobRetryService
      */
     public function retryByFailedJobIds(array $ids): bool
     {
-        $ids = array_values(array_unique(array_map(static fn ($id) => (int) $id, $ids)));
+        return $this->retryByFailedJobIdsWithResult($ids)->isSuccessful();
+    }
 
-        if ($ids === []) {
-            return true;
-        }
+    /**
+     * @param array<int, int|string> $ids
+     */
+    public function retryByFailedJobIdsWithResult(array $ids): FailedJobRetryResult
+    {
+        $ids = array_values(array_unique(array_filter(
+            array_map(static fn ($id) => (int) $id, $ids),
+            static fn (int $id) => $id > 0,
+        )));
 
-        $failedJobs = FailedJob::query()
-            ->whereIn('id', $ids)
-            ->get()
-            ->keyBy('id');
+        $retriedFailedJobIds = [];
+        $completed = true;
+        $columns = (new FailedJob())->hasUuidColumn() ? ['id', 'uuid'] : ['id'];
 
-        $retryKeys = [];
+        foreach (array_chunk($ids, $this->retryChunkSize()) as $chunk) {
+            $failedJobs = FailedJob::query()
+                ->select($columns)
+                ->whereKey($chunk)
+                ->get()
+                ->keyBy('id');
 
-        foreach ($ids as $id) {
-            if (! $failedJobs->has($id)) {
-                continue;
+            foreach ($chunk as $id) {
+                $failedJob = $failedJobs->get($id);
+
+                if ($failedJob === null) {
+                    continue;
+                }
+
+                $retried = $this->retryOne($failedJob);
+
+                if ($retried === null) {
+                    continue;
+                }
+
+                if ($retried) {
+                    $retriedFailedJobIds[] = $id;
+                } else {
+                    $completed = false;
+                }
             }
-
-            $retryKeys[] = $failedJobs->get($id)->retryKey();
         }
 
-        return $this->retry($retryKeys);
+        return $completed
+            ? FailedJobRetryResult::completed($retriedFailedJobIds)
+            : FailedJobRetryResult::failed($retriedFailedJobIds);
     }
 
     /**
@@ -47,8 +77,51 @@ class FailedJobRetryService
             return false;
         }
 
-        return Artisan::call('queue:retry', [
-            'id' => $retryKeys,
-        ]) === 0;
+        try {
+            return Artisan::call('queue:retry', [
+                'id' => $retryKeys,
+            ]) === 0;
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return false;
+        }
+    }
+
+    /**
+     * Returns null when the job was already taken by a concurrent request.
+     */
+    private function retryOne(FailedJob $failedJob): ?bool
+    {
+        $retryKey = $failedJob->retryKey();
+        $store = Cache::getStore();
+        $lock = $store instanceof LockProvider
+            ? $store->lock('failed-jobs-manager:retry:' . $failedJob->getTable() . ':' . $retryKey, $this->lockSeconds())
+            : null;
+
+        if ($lock !== null && ! $lock->get()) {
+            return null;
+        }
+
+        try {
+            // Another request may have retried (and forgotten) the job between loading and locking.
+            if (! FailedJob::query()->whereKey($failedJob->getKey())->exists()) {
+                return null;
+            }
+
+            return $this->retry([$retryKey]);
+        } finally {
+            $lock?->release();
+        }
+    }
+
+    private function retryChunkSize(): int
+    {
+        return max(1, (int) config('failed-jobs-manager.ui.retry_chunk_size', 100));
+    }
+
+    private function lockSeconds(): int
+    {
+        return max(1, (int) config('failed-jobs-manager.ui.retry_lock_seconds', 60));
     }
 }

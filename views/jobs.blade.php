@@ -36,7 +36,7 @@
 
     @include('failed-jobs-manager::partials.filter')
 
-    @if(config('failed-jobs-manager.ui.allow_retry'))
+    @if($canRetry)
         <form id="failed-jobs-bulk-retry-form" action="{{ route('failed-jobs-manager::retry-bulk') }}" method="post">
             @csrf
             @method('patch')
@@ -45,7 +45,7 @@
 
     @include('failed-jobs-manager::partials.table')
 
-    @if(config('failed-jobs-manager.ui.allow_retry'))
+    @if($canRetry)
         <div class="fjm-panel">
             <button type="submit" form="failed-jobs-bulk-retry-form" class="fjm-button fjm-button-orange">
                 {{ __('failed-jobs-manager::failed-jobs-manager.actions.retry_selected') }}

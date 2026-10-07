@@ -42,13 +42,37 @@ class FailedJobsManagerProvider extends ServiceProvider
 
     public function register(): void
     {
-        $this->mergeRecursiveConfigFrom(__DIR__ . '/../../config/failed-jobs-manager.php', 'failed-jobs-manager');
+        if ($this->app->configurationIsCached()) {
+            return;
+        }
+
+        $config = $this->app['config'];
+        $key = 'failed-jobs-manager';
+
+        $config->set($key, $this->mergeConfig(
+            require __DIR__ . '/../../config/failed-jobs-manager.php',
+            $config->get($key, []),
+        ));
     }
 
-    private function mergeRecursiveConfigFrom(string $path, string $key): void
+    /**
+     * Associative arrays are merged recursively, lists (middleware, roles) are replaced as a whole.
+     *
+     * @param array<array-key, mixed> $defaults
+     * @param array<array-key, mixed> $overrides
+     *
+     * @return array<array-key, mixed>
+     */
+    private function mergeConfig(array $defaults, array $overrides): array
     {
-        $config = $this->app['config'];
+        foreach ($overrides as $key => $value) {
+            $default = $defaults[$key] ?? null;
 
-        $config->set($key, array_replace_recursive(require $path, $config->get($key, [])));
+            $defaults[$key] = is_array($value) && is_array($default) && ! array_is_list($value) && ! array_is_list($default)
+                ? $this->mergeConfig($default, $value)
+                : $value;
+        }
+
+        return $defaults;
     }
 }

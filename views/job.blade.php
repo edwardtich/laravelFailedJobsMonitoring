@@ -11,7 +11,7 @@
         {{ __('failed-jobs-manager::failed-jobs-manager.actions.back') }}
     </a>
 
-    @if(config('failed-jobs-manager.ui.allow_retry'))
+    @if($canRetry)
         <form action="{{ route('failed-jobs-manager::retry', $failedJob->id) }}" method="post" class="fjm-inline-form">
             @csrf
             @method('patch')
@@ -21,11 +21,11 @@
         </form>
     @endif
 
-    @if(config('failed-jobs-manager.ui.allow_delete'))
+    @if($canDelete)
         <form action="{{ route('failed-jobs-manager::destroy', $failedJob->id) }}" method="post" class="fjm-inline-form">
             @csrf
             @method('delete')
-            <button type="submit" class="fjm-button fjm-button-red" onclick="return confirm('{{ __('failed-jobs-manager::failed-jobs-manager.actions.delete_confirm') }}')">
+            <button type="submit" class="fjm-button fjm-button-red" onclick="return confirm(@js(__('failed-jobs-manager::failed-jobs-manager.actions.delete_confirm')))">
                 {{ __('failed-jobs-manager::failed-jobs-manager.actions.delete') }}
             </button>
         </form>
@@ -41,7 +41,7 @@
             </tr>
             <tr>
                 <th>UUID</th>
-                <td>{{ $failedJob->uuid }}</td>
+                <td>{{ $failedJob->uuidValue() }}</td>
             </tr>
             <tr>
                 <th>{{ __('failed-jobs-manager::failed-jobs-manager.filters.queue') }}</th>
@@ -67,7 +67,7 @@
 
         <section class="fjm-detail-card fjm-detail-card-danger">
             <h4 class="fjm-section-title">{{ __('failed-jobs-manager::failed-jobs-manager.details.exception_summary') }}</h4>
-            <div class="fjm-exception-message">{{ $exception->message() }}</div>
+            <div class="fjm-exception-message">{{ $exception->safeMessage() }}</div>
             <br>
             <dl class="fjm-kv">
                 @foreach($exception->summary() as $label => $value)
@@ -78,26 +78,28 @@
         </section>
     </div>
 
-    @if($payload->command())
+    @if($canViewSensitivePayload)
+        @if($payload->command())
+            <details class="fjm-details">
+                <summary>{{ __('failed-jobs-manager::failed-jobs-manager.details.serialized_command') }}</summary>
+                <div class="fjm-details-body">
+                    <pre class="fjm-pre">{{ $payload->command() }}</pre>
+                </div>
+            </details>
+        @endif
+
         <details class="fjm-details">
-            <summary>{{ __('failed-jobs-manager::failed-jobs-manager.details.serialized_command') }}</summary>
+            <summary>{{ __('failed-jobs-manager::failed-jobs-manager.details.raw_payload') }}</summary>
             <div class="fjm-details-body">
-                <pre class="fjm-pre">{{ $payload->command() }}</pre>
+                <pre class="fjm-pre">{{ $payload->pretty() }}</pre>
+            </div>
+        </details>
+
+        <details class="fjm-details">
+            <summary>{{ __('failed-jobs-manager::failed-jobs-manager.details.raw_exception') }}</summary>
+            <div class="fjm-details-body">
+                <pre class="fjm-pre">{{ $exception->raw() }}</pre>
             </div>
         </details>
     @endif
-
-    <details class="fjm-details">
-        <summary>{{ __('failed-jobs-manager::failed-jobs-manager.details.raw_payload') }}</summary>
-        <div class="fjm-details-body">
-            <pre class="fjm-pre">{{ $payload->pretty() }}</pre>
-        </div>
-    </details>
-
-    <details class="fjm-details">
-        <summary>{{ __('failed-jobs-manager::failed-jobs-manager.details.raw_exception') }}</summary>
-        <div class="fjm-details-body">
-            <pre class="fjm-pre">{{ $exception->raw() }}</pre>
-        </div>
-    </details>
 @endsection

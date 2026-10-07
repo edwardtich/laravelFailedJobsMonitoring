@@ -53,6 +53,11 @@ class FailedJobException
         return trim(preg_replace('/\s+in\s+.+:\d+$/', '', $headline) ?: $headline);
     }
 
+    public function safeMessage(): string
+    {
+        return SensitiveDataRedactor::redact($this->message());
+    }
+
     public function file(): ?string
     {
         if (preg_match('/\sin\s(.+):(\d+)$/', $this->headline(), $matches)) {
@@ -100,7 +105,7 @@ class FailedJobException
     {
         return [
             __('failed-jobs-manager::failed-jobs-manager.exception.class') => $this->className(),
-            __('failed-jobs-manager::failed-jobs-manager.exception.message') => $this->message(),
+            __('failed-jobs-manager::failed-jobs-manager.exception.message') => $this->safeMessage(),
             __('failed-jobs-manager::failed-jobs-manager.exception.file') => $this->file(),
             __('failed-jobs-manager::failed-jobs-manager.exception.line') => $this->line(),
         ];
@@ -108,6 +113,6 @@ class FailedJobException
 
     public function preview(int $limit): string
     {
-        return Str::limit($this->message(), $limit);
+        return Str::limit($this->safeMessage(), $limit);
     }
 }
