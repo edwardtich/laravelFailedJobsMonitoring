@@ -1,11 +1,5 @@
 # Changelog
 
-## Unreleased
-
-### Added
-
-- `filament.register_in_main_navigation` option: registers a clustered page in the main navigation, for panels that hide the cluster sub-navigation and show clustered items under a parent item. Previously such a page was reachable only by URL.
-
 ## 2.1.0 - 2026-10-30
 
 ### Changed
@@ -20,6 +14,7 @@
 ### Added
 
 - `failed-jobs-manager:permissions` command that creates the configured permissions with spatie/laravel-permission.
+- `filament.register_in_main_navigation` option: registers a clustered page in the main navigation, for panels that hide the cluster sub-navigation and show clustered items under a parent item. Previously such a page was reachable only by URL.
 - Confirmation before retrying a job or the selected jobs, in both the Filament page and the standalone UI.
 
 ## 2.0.0 - 2026-10-07
