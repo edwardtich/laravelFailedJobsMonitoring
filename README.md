@@ -2,7 +2,7 @@
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/edwardtich/laravel-failed-jobs-manager.svg?style=flat-square)](https://packagist.org/packages/edwardtich/laravel-failed-jobs-manager)
 [![PHP Version Require](https://img.shields.io/packagist/php-v/edwardtich/laravel-failed-jobs-manager.svg?style=flat-square)](https://packagist.org/packages/edwardtich/laravel-failed-jobs-manager)
-[![Laravel Version](https://img.shields.io/badge/Laravel-11%2F12-orange?style=flat-square)](https://laravel.com)
+[![Laravel Version](https://img.shields.io/badge/Laravel-12%2F13-orange?style=flat-square)](https://laravel.com)
 
 Laravel package for working with the standard `failed_jobs` table.
 
@@ -135,7 +135,7 @@ return [
         'allow_delete' => true,
         'retry_key' => 'auto',
         'retry_chunk_size' => 100,
-        'retry_max_ids' => 1000,
+        'retry_max_ids' => 50,
         'retry_lock_seconds' => 60,
         'queues_cache_ttl' => 60,
         'search_max_length' => 120,
@@ -150,7 +150,6 @@ return [
             'view' => null,
             'retry' => null,
             'delete' => null,
-            'view_sensitive_payload' => null,
         ],
     ],
 
@@ -248,14 +247,23 @@ Route middleware and Filament page access determine who can open the manager. Th
         'view' => 'failed-jobs.view',
         'retry' => 'failed-jobs.retry',
         'delete' => 'failed-jobs.delete',
-        'view_sensitive_payload' => 'failed-jobs.view-sensitive-payload',
     ],
 ],
 ```
 
-`retry` and `delete` also require `view`. When an operation permission is `null`, the package keeps the existing page-access behavior for backward compatibility. `view_sensitive_payload` is denied until an explicit permission is configured.
+`retry` and `delete` also require `view`. A `null` operation permission denies the operation: retry and delete are never available until a permission is configured and assigned. A `null` `view` permission leaves page access to the gate (standalone UI) or `filament.roles` (Filament page).
 
-This lets an operator inspect failed jobs without being allowed to retry or delete them. The sensitive permission reveals the serialized command and full raw payload / exception; do not assign it broadly.
+This lets an operator inspect failed jobs without being allowed to retry or delete them.
+
+Users without `retry` or `delete` see masked exception messages: besides credentials, the SQL with bindings (`(Connection: ..., SQL: ...)`) and duplicate key values are hidden, and the file and line are not shown. Their search matches only the job `uuid` and the exception class (as a prefix, e.g. `Illuminate\Database\QueryException`), so hidden values cannot be guessed by trying substrings. Users with `retry` or `delete` see the unmasked message and search the full exception and payload text.
+
+If the project uses spatie/laravel-permission, create the configured permissions with:
+
+```bash
+php artisan failed-jobs-manager:permissions --guard=web
+```
+
+The command only creates permissions (including `filament.permission`, when set); assign them to roles or users in your application.
 
 If your panel path is `/admin`, the page will be available at:
 
@@ -376,7 +384,7 @@ The package then checks:
 $user->can($permission);
 ```
 
-`roles` is only used as a fallback. This is useful for roles like `super_admin` before Shield permissions are generated or assigned, but production access should preferably be permission-based.
+`roles` is only used as a fallback when neither `filament.permission` (or the Shield page permission) nor `authorization.permissions.view` is configured; a user who lacks a configured permission is denied even if they have a listed role. This is useful for roles like `super_admin` before Shield permissions are generated or assigned, but production access should preferably be permission-based.
 
 The Filament page permission controls access to the page itself. Configure the operation permissions from the previous section as well; a `View:*` permission must not be the only permission assigned to an operator who should retry or delete jobs.
 
@@ -436,7 +444,7 @@ Search is limited before querying the database:
 ],
 ```
 
-The search filter matches the exact `uuid` and the `exception` text. The `payload` is searched only for users with the `view_sensitive_payload` permission, otherwise the search would let anyone reveal hidden payload content by guessing substrings. `%` and `_` are matched literally. The search uses a `LIKE '%...%'` query, so keep it for operational inspection, not for high-volume analytics.
+Users with `retry` or `delete` search the exact `uuid` and the full `exception` and `payload` text. Other users search only the exact `uuid` and the exception class prefix, otherwise the search would let anyone reveal masked content by guessing substrings. `%` and `_` are matched literally. The search uses a `LIKE '%...%'` query, so keep it for operational inspection, not for high-volume analytics.
 
 ## Retry Key
 
@@ -515,7 +523,6 @@ Standalone permission example:
         'view' => 'failed-jobs.view',
         'retry' => 'failed-jobs.retry',
         'delete' => 'failed-jobs.delete',
-        'view_sensitive_payload' => 'failed-jobs.view-sensitive-payload',
     ],
 ],
 ```
@@ -543,9 +550,9 @@ If the page is used only inside Filament, disable the standalone UI:
 ],
 ```
 
-Raw payloads are hidden unless `authorization.permissions.view_sensitive_payload` is explicitly configured and assigned. Exception summaries redact common credential names such as `token`, `secret`, `password`, and `api_key`; this is a safety measure, not a replacement for access control.
+The raw payload is never shown. Exception messages always redact common credential names such as `token`, `secret`, `password`, and `api_key`, and are additionally masked for users without `retry` or `delete`; this is a safety measure, not a replacement for access control.
 
-Retry requests are loaded in `ui.retry_chunk_size` chunks, and one request accepts at most `ui.retry_max_ids` jobs. Every job is retried under a cache lock (`ui.retry_lock_seconds`) and is re-checked inside the lock, so a double click or two operators retrying the same job do not push it onto the queue twice. Queue errors are reported through the exception handler and shown as a failed retry instead of an HTTP 500.
+Retry requests are loaded in `ui.retry_chunk_size` chunks, and one request accepts at most `ui.retry_max_ids` jobs (50 by default; a larger selection is refused, not truncated). Bulk retry runs synchronously inside the HTTP request, so keep the limit small enough to finish within your request timeout. Every job is retried under a cache lock (`ui.retry_lock_seconds`) and is re-checked inside the lock, so a double click or two operators retrying the same job do not push it onto the queue twice. Queue errors are reported through the exception handler and shown as a failed retry instead of an HTTP 500.
 
 The list of queues in the filter is cached for `ui.queues_cache_ttl` seconds (`0` disables caching), because `SELECT DISTINCT queue` scans the whole table.
 

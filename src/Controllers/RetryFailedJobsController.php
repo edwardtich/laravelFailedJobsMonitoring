@@ -22,7 +22,7 @@ class RetryFailedJobsController
                 'required',
                 'array',
                 'min:1',
-                'max:' . max(1, (int) config('failed-jobs-manager.ui.retry_max_ids', 1000)),
+                'max:' . max(1, (int) config('failed-jobs-manager.ui.retry_max_ids', 50)),
             ],
             'ids.*' => [
                 'integer',

@@ -409,7 +409,7 @@
                         type="text"
                         wire:model.live.debounce.500ms="search"
                         class="fjm-input"
-                        placeholder="{{ __('failed-jobs-manager::failed-jobs-manager.filters.search_placeholder') }}"
+                        placeholder="{{ __('failed-jobs-manager::failed-jobs-manager.filters.' . ($canViewUnmasked ? 'search_placeholder' : 'search_placeholder_limited')) }}"
                     >
                 </label>
 
@@ -434,6 +434,7 @@
                 <x-filament::button
                     color="warning"
                     wire:click="retrySelected"
+                    wire:confirm="{{ __('failed-jobs-manager::failed-jobs-manager.actions.retry_selected_confirm') }}"
                     :disabled="empty($selectedJobs)"
                 >
                     {{ __('failed-jobs-manager::failed-jobs-manager.actions.retry_selected') }}
@@ -492,13 +493,18 @@
                                 </div>
                             </td>
                             <td>
-                                <div class="fjm-exception">{{ $exception->safeMessage() }}</div>
+                                <div class="fjm-exception">{{ $exception->safeMessage(! $canViewUnmasked) }}</div>
                             </td>
                             <td>{{ $job->failed_at?->format('d.m.Y H:i:s') }}</td>
                             <td>
                                 <div class="fjm-actions">
                                     @if($canRetry)
-                                        <x-filament::button size="sm" color="warning" wire:click="retry({{ $job->id }})">
+                                        <x-filament::button
+                                            size="sm"
+                                            color="warning"
+                                            wire:click="retry({{ $job->id }})"
+                                            wire:confirm="{{ __('failed-jobs-manager::failed-jobs-manager.actions.retry_confirm') }}"
+                                        >
                                             {{ __('failed-jobs-manager::failed-jobs-manager.actions.retry') }}
                                         </x-filament::button>
                                     @endif
@@ -540,9 +546,9 @@
 
                                             <div class="fjm-summary-section">
                                                 <h3 class="fjm-section-title">{{ __('failed-jobs-manager::failed-jobs-manager.details.exception_summary') }}</h3>
-                                                <div class="fjm-exception" style="margin-bottom: .7rem;">{{ $exception->safeMessage() }}</div>
+                                                <div class="fjm-exception" style="margin-bottom: .7rem;">{{ $exception->safeMessage(! $canViewUnmasked) }}</div>
                                                 <dl>
-                                                    @foreach($exception->summary() as $label => $value)
+                                                    @foreach($exception->summary(! $canViewUnmasked) as $label => $value)
                                                         <div class="fjm-definition">
                                                             <dt>{{ $label }}</dt>
                                                             <dd>{{ $value === null || $value === '' ? __('failed-jobs-manager::failed-jobs-manager.details.empty_value') : $value }}</dd>

@@ -95,7 +95,12 @@ class FailedJobsManagerPage extends Page
 
         $permission = static::getConfiguredPermission();
 
-        if ($permission && $user->can($permission)) {
+        // A configured permission is authoritative: roles are only a fallback for projects without permissions.
+        if ($permission) {
+            return $user->can($permission) && static::canPerform($user, FailedJobsManagerAuthorization::VIEW);
+        }
+
+        if (app(FailedJobsManagerAuthorization::class)->isConfigured(FailedJobsManagerAuthorization::VIEW)) {
             return static::canPerform($user, FailedJobsManagerAuthorization::VIEW);
         }
 
@@ -193,13 +198,20 @@ class FailedJobsManagerPage extends Page
         abort_unless(config('failed-jobs-manager.ui.allow_retry'), 403);
         $this->authorizeAbility(FailedJobsManagerAuthorization::RETRY);
 
-        $selectedJobs = array_slice(
-            array_values(array_unique(array_map('intval', $this->selectedJobs))),
-            0,
-            max(1, (int) config('failed-jobs-manager.ui.retry_max_ids', 1000)),
-        );
+        $selectedJobs = array_values(array_unique(array_map('intval', $this->selectedJobs)));
+        $maxIds = max(1, (int) config('failed-jobs-manager.ui.retry_max_ids', 50));
 
         if ($selectedJobs === []) {
+            return;
+        }
+
+        // Refuse instead of silently retrying only the first $maxIds jobs.
+        if (count($selectedJobs) > $maxIds) {
+            Notification::make()
+                ->title(__('failed-jobs-manager::failed-jobs-manager.flash.bulk_retry_too_many', ['max' => $maxIds]))
+                ->danger()
+                ->send();
+
             return;
         }
 
@@ -303,7 +315,8 @@ class FailedJobsManagerPage extends Page
         $authorization = app(FailedJobsManagerAuthorization::class);
         $user = Filament::auth()?->user();
         $isFilterApplied = array_filter($filters) !== [];
-        $jobs = $failedJobQuery->list($filters, $this->canSearchPayload())->paginate(
+        $canViewUnmasked = $authorization->canViewUnmasked($user);
+        $jobs = $failedJobQuery->list($filters, $canViewUnmasked)->paginate(
             perPage: $this->perPage(),
             pageName: 'page',
             page: $this->getPage()
@@ -318,6 +331,7 @@ class FailedJobsManagerPage extends Page
             'isFilterApplied' => $isFilterApplied,
             'canRetry' => $authorization->canOperate($user, FailedJobsManagerAuthorization::RETRY),
             'canDelete' => $authorization->canOperate($user, FailedJobsManagerAuthorization::DELETE),
+            'canViewUnmasked' => $canViewUnmasked,
             'allCurrentPageJobsSelected' => $currentPageJobIds !== [] && array_diff($currentPageJobIds, $selectedJobs) === [],
         ];
     }
@@ -401,7 +415,7 @@ class FailedJobsManagerPage extends Page
 
     private function canSearchPayload(): bool
     {
-        return static::canPerform(Filament::auth()?->user(), FailedJobsManagerAuthorization::VIEW_SENSITIVE_PAYLOAD);
+        return app(FailedJobsManagerAuthorization::class)->canViewUnmasked(Filament::auth()?->user());
     }
 
     private function perPage(): int

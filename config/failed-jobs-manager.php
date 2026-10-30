@@ -22,7 +22,8 @@ return [
         // auto: uuid for the "database-uuids" failer driver, id otherwise.
         'retry_key' => 'auto',
         'retry_chunk_size' => 100,
-        'retry_max_ids' => 1000,
+        // Bulk retry runs synchronously in the HTTP request; keep the limit small to stay within timeouts.
+        'retry_max_ids' => 50,
         'retry_lock_seconds' => 60,
         'queues_cache_ttl' => 60,
         'search_max_length' => 120,
@@ -35,11 +36,13 @@ return [
         // the standalone UI is only available in the local environment.
         'gate' => 'viewFailedJobsManager',
 
+        // view: null leaves page access to the gate (standalone) or filament.roles.
+        // retry / delete: null denies the operation. Users who can retry or delete also see
+        // unmasked exception messages and can search the full exception and payload text.
         'permissions' => [
             'view' => null,
             'retry' => null,
             'delete' => null,
-            'view_sensitive_payload' => null,
         ],
     ],
 

@@ -19,7 +19,7 @@ class ShowFailedJobController
 
         return view('failed-jobs-manager::job', [
             'failedJob' => $failedJob,
-            'canViewSensitivePayload' => $authorization->can($user, FailedJobsManagerAuthorization::VIEW_SENSITIVE_PAYLOAD),
+            'canViewUnmasked' => $authorization->canViewUnmasked($user),
             'canRetry' => $authorization->canOperate($user, FailedJobsManagerAuthorization::RETRY),
             'canDelete' => $authorization->canOperate($user, FailedJobsManagerAuthorization::DELETE),
         ]);

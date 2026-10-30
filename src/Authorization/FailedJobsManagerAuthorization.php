@@ -15,13 +15,10 @@ class FailedJobsManagerAuthorization
 
     public const string DELETE = 'delete';
 
-    public const string VIEW_SENSITIVE_PAYLOAD = 'view_sensitive_payload';
-
     private const array ABILITIES = [
         self::VIEW,
         self::RETRY,
         self::DELETE,
-        self::VIEW_SENSITIVE_PAYLOAD,
     ];
 
     public function authorize(?Authenticatable $user, string $ability): void
@@ -45,7 +42,9 @@ class FailedJobsManagerAuthorization
         $permission = $this->permission($ability);
 
         if ($permission === null) {
-            return $ability !== self::VIEW_SENSITIVE_PAYLOAD;
+            // Without a view permission, page access (Filament page or standalone gate) decides.
+            // Operations are never granted implicitly.
+            return $ability === self::VIEW;
         }
 
         return $user !== null && Gate::forUser($user)->allows($permission);
@@ -63,6 +62,36 @@ class FailedJobsManagerAuthorization
         };
 
         return $enabled && $this->can($user, $ability);
+    }
+
+    /**
+     * Unmasked exception text and full-text payload search are reserved for operators
+     * who are allowed to retry or delete jobs.
+     */
+    public function canViewUnmasked(?Authenticatable $user): bool
+    {
+        return $this->can($user, self::RETRY) || $this->can($user, self::DELETE);
+    }
+
+    public function isConfigured(string $ability): bool
+    {
+        return $this->permission($ability) !== null;
+    }
+
+    /**
+     * @return array<string, string> ability => permission name
+     */
+    public function configuredPermissions(): array
+    {
+        $permissions = [];
+
+        foreach (self::ABILITIES as $ability) {
+            if ($permission = $this->permission($ability)) {
+                $permissions[$ability] = $permission;
+            }
+        }
+
+        return $permissions;
     }
 
     public function canUseStandalone(?Authenticatable $user, string $ability): bool

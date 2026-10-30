@@ -53,9 +53,14 @@ class FailedJobException
         return trim(preg_replace('/\s+in\s+.+:\d+$/', '', $headline) ?: $headline);
     }
 
-    public function safeMessage(): string
+    /**
+     * Secrets are always redacted; $masked additionally hides personal data (see SensitiveDataRedactor::mask()).
+     */
+    public function safeMessage(bool $masked = true): string
     {
-        return SensitiveDataRedactor::redact($this->message());
+        return $masked
+            ? SensitiveDataRedactor::mask($this->message())
+            : SensitiveDataRedactor::redact($this->message());
     }
 
     public function file(): ?string
@@ -99,20 +104,30 @@ class FailedJobException
     }
 
     /**
+     * The masked summary leaves out the file and line: server paths and code layout
+     * are only needed by those who handle the failure.
+     *
      * @return array<string, mixed>
      */
-    public function summary(): array
+    public function summary(bool $masked = true): array
     {
-        return [
+        $summary = [
             __('failed-jobs-manager::failed-jobs-manager.exception.class') => $this->className(),
-            __('failed-jobs-manager::failed-jobs-manager.exception.message') => $this->safeMessage(),
+            __('failed-jobs-manager::failed-jobs-manager.exception.message') => $this->safeMessage($masked),
+        ];
+
+        if ($masked) {
+            return $summary;
+        }
+
+        return $summary + [
             __('failed-jobs-manager::failed-jobs-manager.exception.file') => $this->file(),
             __('failed-jobs-manager::failed-jobs-manager.exception.line') => $this->line(),
         ];
     }
 
-    public function preview(int $limit): string
+    public function preview(int $limit, bool $masked = true): string
     {
-        return Str::limit($this->safeMessage(), $limit);
+        return Str::limit($this->safeMessage($masked), $limit);
     }
 }

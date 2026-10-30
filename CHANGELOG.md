@@ -1,6 +1,22 @@
 # Changelog
 
-## 2.0.0 - Unreleased
+## 2.1.0 - 2026-10-30
+
+### Changed
+
+- `authorization.permissions.retry` / `delete` set to `null` deny the operation; retry and delete require an explicitly configured and assigned permission.
+- The job page no longer shows the raw payload, serialized command, or raw exception.
+- `authorization.permissions.view_sensitive_payload` is removed. Unmasked exception messages and full-text search are available to users who can retry or delete.
+- Users without `retry` or `delete` see exception messages with the SQL (`(Connection: ..., SQL: ...)`) and `Duplicate entry` values masked, without the file and line, and search only by `uuid` and exception class prefix; the search placeholder says so.
+- `ui.retry_max_ids` defaults to 50: bulk retry runs synchronously in the HTTP request and must finish within the request timeout. The Filament page refuses a larger selection instead of silently retrying only the first jobs.
+- Filament page: when a page permission (`filament.permission` or Shield) or `authorization.permissions.view` is configured, only that permission grants access; `filament.roles` is a fallback for projects without permissions.
+
+### Added
+
+- `failed-jobs-manager:permissions` command that creates the configured permissions with spatie/laravel-permission.
+- Confirmation before retrying a job or the selected jobs, in both the Filament page and the standalone UI.
+
+## 2.0.0 - 2026-10-07
 
 ### Breaking
 

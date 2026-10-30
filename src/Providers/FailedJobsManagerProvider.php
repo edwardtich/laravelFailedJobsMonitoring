@@ -2,6 +2,7 @@
 
 namespace EdwardTich\FailedJobsManager\Providers;
 
+use EdwardTich\FailedJobsManager\Console\CreatePermissionsCommand;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
@@ -10,6 +11,10 @@ class FailedJobsManagerProvider extends ServiceProvider
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
+            $this->commands([
+                CreatePermissionsCommand::class,
+            ]);
+
             $this->publishes([
                 __DIR__ . '/../../config/failed-jobs-manager.php' => config_path('failed-jobs-manager.php'),
             ], 'config');

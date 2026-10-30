@@ -60,26 +60,39 @@ class FailedJob extends Model
     }
 
     /**
+     * $fullText searches the whole exception and payload. Without it only the exception class
+     * (as a prefix of the stored text) and the job uuid are searchable, so hidden values
+     * cannot be guessed by trying substrings.
+     *
      * @param array<string, mixed> $filters
      */
-    public function scopeFilter(Builder $query, array $filters, bool $searchPayload = false): void
+    public function scopeFilter(Builder $query, array $filters, bool $fullText = false): void
     {
         $query
             ->when($filters['queue'] ?? null, function (Builder $query, string $queue) {
                 $query->where('queue', $queue);
             })
-            ->when($filters['search'] ?? null, function (Builder $query, string $search) use ($searchPayload) {
+            ->when($filters['search'] ?? null, function (Builder $query, string $search) use ($fullText) {
                 $search = trim(Str::limit($search, (int) config('failed-jobs-manager.ui.search_max_length', 120), ''));
 
                 if ($search === '') {
                     return;
                 }
 
-                $pattern = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search) . '%';
+                $escaped = str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search);
+                $pattern = '%' . $escaped . '%';
                 $grammar = $query->getQuery()->getGrammar();
+                // A class name cannot contain ':', so a prefix match never reaches the message.
+                $isClassName = preg_match('/^[A-Za-z_\\\\][A-Za-z0-9_\\\\]*$/', $search) === 1;
 
-                $query->where(function (Builder $query) use ($search, $pattern, $grammar, $searchPayload) {
-                    $query->whereRaw($grammar->wrap('exception') . " like ? escape '!'", [$pattern]);
+                $query->where(function (Builder $query) use ($search, $escaped, $pattern, $grammar, $fullText, $isClassName) {
+                    if ($fullText) {
+                        $query->whereRaw($grammar->wrap('exception') . " like ? escape '!'", [$pattern]);
+                    } elseif ($isClassName) {
+                        $query->whereRaw($grammar->wrap('exception') . " like ? escape '!'", [$escaped . '%']);
+                    } else {
+                        $query->whereRaw('1 = 0');
+                    }
 
                     if ($this->hasUuidColumn()) {
                         $query->orWhere('uuid', $search);
@@ -88,7 +101,7 @@ class FailedJob extends Model
                         $query->orWhere('payload', 'like', '%"uuid":"' . strtolower($search) . '"%');
                     }
 
-                    if ($searchPayload) {
+                    if ($fullText) {
                         $query->orWhereRaw($grammar->wrap('payload') . " like ? escape '!'", [$pattern]);
                     }
                 });
@@ -106,9 +119,9 @@ class FailedJob extends Model
         return $this->payloadDetails()->preview((int) config('failed-jobs-manager.ui.payload_preview_length', 300));
     }
 
-    public function getExceptionPreview(): string
+    public function getExceptionPreview(bool $masked = true): string
     {
-        return $this->exceptionDetails()->preview((int) config('failed-jobs-manager.ui.exception_preview_length', 500));
+        return $this->exceptionDetails()->preview((int) config('failed-jobs-manager.ui.exception_preview_length', 500), $masked);
     }
 
     public function payloadDetails(): FailedJobPayload

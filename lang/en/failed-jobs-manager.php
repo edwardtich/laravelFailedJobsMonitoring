@@ -23,6 +23,7 @@ return [
         'not_selected' => 'Not selected',
         'search' => 'Search',
         'search_placeholder' => 'payload or exception',
+        'search_placeholder_limited' => 'uuid or exception class',
         'failed_from' => 'Date from',
         'failed_to' => 'Date to',
         'submit' => 'Search',
@@ -47,6 +48,8 @@ return [
         'details' => 'Details',
         'retry' => 'Retry',
         'retry_selected' => 'Retry selected',
+        'retry_confirm' => 'Retry this job?',
+        'retry_selected_confirm' => 'Retry selected jobs?',
         'selected_count' => 'Selected: :count',
         'delete' => 'Delete',
         'delete_confirm' => 'Delete record?',
@@ -88,5 +91,6 @@ return [
         'bulk_retry_sent' => 'Jobs sent to retry',
         'bulk_retry_partially_sent' => 'Some jobs were sent to retry before an error occurred',
         'retry_failed' => 'Unable to send job to retry',
+        'bulk_retry_too_many' => 'You can retry at most :max jobs at once',
     ],
 ];

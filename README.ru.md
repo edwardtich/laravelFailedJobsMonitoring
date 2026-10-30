@@ -2,7 +2,7 @@
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/edwardtich/laravel-failed-jobs-manager.svg?style=flat-square)](https://packagist.org/packages/edwardtich/laravel-failed-jobs-manager)
 [![PHP Version Require](https://img.shields.io/packagist/php-v/edwardtich/laravel-failed-jobs-manager.svg?style=flat-square)](https://packagist.org/packages/edwardtich/laravel-failed-jobs-manager)
-[![Laravel Version](https://img.shields.io/badge/Laravel-11%2F12-orange?style=flat-square)](https://laravel.com)
+[![Laravel Version](https://img.shields.io/badge/Laravel-12%2F13-orange?style=flat-square)](https://laravel.com)
 
 Пакет для Laravel, который помогает работать со стандартной таблицей `failed_jobs`.
 
@@ -135,7 +135,7 @@ return [
         'allow_delete' => true,
         'retry_key' => 'auto',
         'retry_chunk_size' => 100,
-        'retry_max_ids' => 1000,
+        'retry_max_ids' => 50,
         'retry_lock_seconds' => 60,
         'queues_cache_ttl' => 60,
         'search_max_length' => 120,
@@ -150,7 +150,6 @@ return [
             'view' => null,
             'retry' => null,
             'delete' => null,
-            'view_sensitive_payload' => null,
         ],
     ],
 
@@ -248,14 +247,23 @@ Route middleware и доступ к странице Filament определяю
         'view' => 'failed-jobs.view',
         'retry' => 'failed-jobs.retry',
         'delete' => 'failed-jobs.delete',
-        'view_sensitive_payload' => 'failed-jobs.view-sensitive-payload',
     ],
 ],
 ```
 
-`retry` и `delete` дополнительно требуют `view`. Если permission действия равен `null`, пакет сохраняет прежнее поведение на основе доступа к странице. `view_sensitive_payload` запрещен, пока ему явно не задан permission.
+`retry` и `delete` дополнительно требуют `view`. Если permission действия равен `null`, действие запрещено: retry и delete недоступны, пока permission не настроен и не выдан. Если `null` у `view`, доступ к странице решает gate (standalone UI) или `filament.roles` (страница Filament).
 
-Так оператор может смотреть failed jobs, но не сможет их перезапускать или удалять. Sensitive permission открывает сериализованную команду и полный raw payload / exception — выдавать его всем нельзя.
+Так оператор может смотреть failed jobs, но не сможет их перезапускать или удалять.
+
+Пользователи без `retry` и `delete` видят замаскированный текст ошибки: кроме секретов скрываются SQL с подставленными значениями (`(Connection: ..., SQL: ...)`) и значения из `Duplicate entry`, а файл и строка не показываются. Их поиск работает только по `uuid` задачи и классу исключения (по началу строки, например `Illuminate\Database\QueryException`), поэтому скрытые значения нельзя подобрать перебором подстрок. Пользователи с `retry` или `delete` видят текст без маскирования и ищут по полному тексту exception и payload.
+
+Если в проекте стоит spatie/laravel-permission, настроенные permissions можно создать командой:
+
+```bash
+php artisan failed-jobs-manager:permissions --guard=web
+```
+
+Команда только создает permissions (включая `filament.permission`, если он задан); назначать их ролям и пользователям нужно в приложении.
 
 Если панель доступна по пути `/admin`, страница будет доступна по адресу:
 
@@ -376,7 +384,7 @@ View:FailedJobsManagerPage
 $user->can($permission);
 ```
 
-`roles` используется только как fallback. Это удобно, например, для `super_admin` до генерации или назначения Shield permissions, но основную проверку доступа в production лучше держать через permission.
+`roles` используется только как fallback, когда не настроены ни `filament.permission` (или permission страницы из Shield), ни `authorization.permissions.view`; если permission настроен, а у пользователя его нет, доступ запрещен даже при подходящей роли. Это удобно, например, для `super_admin` до генерации или назначения Shield permissions, но основную проверку доступа в production лучше держать через permission.
 
 Permission страницы Filament контролирует только вход на страницу. Дополнительно настройте permissions действий из предыдущего раздела: одного `View:*` недостаточно для оператора, который должен делать retry или delete.
 
@@ -436,7 +444,7 @@ failed-jobs-manager::failed-jobs-manager
 ],
 ```
 
-Поиск ищет точное совпадение по `uuid` и по тексту `exception`. По `payload` ищут только пользователи с правом `view_sensitive_payload`: иначе поиск позволял бы восстановить скрытое содержимое payload подбором подстрок. `%` и `_` ищутся буквально. Поиск работает через `LIKE '%...%'`, так что это инструмент операционного просмотра, а не аналитики на больших объёмах.
+Пользователи с `retry` или `delete` ищут по точному `uuid` и по полному тексту `exception` и `payload`. Остальные ищут только по точному `uuid` и по началу класса исключения: иначе поиск позволял бы восстановить замаскированное содержимое подбором подстрок. `%` и `_` ищутся буквально. Поиск работает через `LIKE '%...%'`, так что это инструмент операционного просмотра, а не аналитики на больших объёмах.
 
 ## Ключ повтора
 
@@ -515,7 +523,6 @@ php artisan queue:forget 91401d2c-0784-4f43-824c-34f94a33c24d
         'view' => 'failed-jobs.view',
         'retry' => 'failed-jobs.retry',
         'delete' => 'failed-jobs.delete',
-        'view_sensitive_payload' => 'failed-jobs.view-sensitive-payload',
     ],
 ],
 ```
@@ -543,9 +550,9 @@ php artisan queue:forget 91401d2c-0784-4f43-824c-34f94a33c24d
 ],
 ```
 
-Raw payload скрыт, пока не настроен и не выдан `authorization.permissions.view_sensitive_payload`. В summary exception маскируются распространенные названия секретов: `token`, `secret`, `password`, `api_key`. Это дополнительная защита, а не замена корректных прав доступа.
+Raw payload не показывается. В тексте ошибки всегда маскируются распространенные названия секретов: `token`, `secret`, `password`, `api_key`, а для пользователей без `retry` и `delete` текст маскируется дополнительно. Это дополнительная защита, а не замена корректных прав доступа.
 
-Retry загружает задачи чанками по `ui.retry_chunk_size`, один запрос принимает не больше `ui.retry_max_ids` задач. Каждая задача перезапускается под cache lock (`ui.retry_lock_seconds`) с повторной проверкой внутри блокировки, поэтому двойной клик или два оператора не отправят одну задачу в очередь дважды. Ошибки очереди уходят в exception handler и показываются как неудачный retry, а не HTTP 500.
+Retry загружает задачи чанками по `ui.retry_chunk_size`, один запрос принимает не больше `ui.retry_max_ids` задач (по умолчанию 50; если выбрано больше, запрос отклоняется целиком, а не обрезается). Массовый retry выполняется синхронно внутри HTTP-запроса, поэтому лимит должен укладываться в таймаут запроса. Каждая задача перезапускается под cache lock (`ui.retry_lock_seconds`) с повторной проверкой внутри блокировки, поэтому двойной клик или два оператора не отправят одну задачу в очередь дважды. Ошибки очереди уходят в exception handler и показываются как неудачный retry, а не HTTP 500.
 
 Список очередей в фильтре кешируется на `ui.queues_cache_ttl` секунд (`0` отключает кеш), потому что `SELECT DISTINCT queue` сканирует всю таблицу.
 

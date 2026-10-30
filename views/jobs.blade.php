@@ -47,7 +47,7 @@
 
     @if($canRetry)
         <div class="fjm-panel">
-            <button type="submit" form="failed-jobs-bulk-retry-form" class="fjm-button fjm-button-orange">
+            <button type="submit" form="failed-jobs-bulk-retry-form" class="fjm-button fjm-button-orange" onclick="return confirm(@js(__('failed-jobs-manager::failed-jobs-manager.actions.retry_selected_confirm')))">
                 {{ __('failed-jobs-manager::failed-jobs-manager.actions.retry_selected') }}
             </button>
         </div>

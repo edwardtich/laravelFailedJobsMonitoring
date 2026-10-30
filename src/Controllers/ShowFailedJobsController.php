@@ -37,10 +37,10 @@ class ShowFailedJobsController
             ],
         ]), static fn ($value) => $value !== null && $value !== '');
 
-        $searchPayload = $authorization->can($request->user(), FailedJobsManagerAuthorization::VIEW_SENSITIVE_PAYLOAD);
+        $canViewUnmasked = $authorization->canViewUnmasked($request->user());
 
         $jobs = $failedJobQuery
-            ->list($filters, $searchPayload)
+            ->list($filters, $canViewUnmasked)
             ->paginate((int) config('failed-jobs-manager.ui.per_page', 20))
             ->appends($filters);
 
@@ -51,6 +51,7 @@ class ShowFailedJobsController
             'queues' => $failedJobQuery->queueOptions(),
             'filteredJobsCount' => $isFilterApplied ? $jobs->total() : null,
             'isFilterApplied' => $isFilterApplied,
+            'canViewUnmasked' => $canViewUnmasked,
             'canRetry' => $authorization->canOperate($request->user(), FailedJobsManagerAuthorization::RETRY),
             'canDelete' => $authorization->canOperate($request->user(), FailedJobsManagerAuthorization::DELETE),
         ]);

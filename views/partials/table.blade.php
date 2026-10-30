@@ -31,7 +31,7 @@
                     <div class="fjm-preview-muted">{{ $payload->uuid() ?: __('failed-jobs-manager::failed-jobs-manager.table.no_uuid') }}</div>
                 </td>
                 <td>
-                    <div class="fjm-preview-error">{{ $job->getExceptionPreview() }}</div>
+                    <div class="fjm-preview-error">{{ $job->getExceptionPreview(! $canViewUnmasked) }}</div>
                 </td>
                 <td>{{ $job->failed_at?->format('d.m.Y H:i:s') }}</td>
                 <td>
@@ -44,7 +44,7 @@
                             <form action="{{ route('failed-jobs-manager::retry', $job->id) }}" method="post" class="fjm-inline-form">
                                 @csrf
                                 @method('patch')
-                                <button type="submit" class="fjm-button fjm-button-orange">
+                                <button type="submit" class="fjm-button fjm-button-orange" onclick="return confirm(@js(__('failed-jobs-manager::failed-jobs-manager.actions.retry_confirm')))">
                                     {{ __('failed-jobs-manager::failed-jobs-manager.actions.retry') }}
                                 </button>
                             </form>

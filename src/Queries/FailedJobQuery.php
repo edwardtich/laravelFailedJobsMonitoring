@@ -13,10 +13,10 @@ class FailedJobQuery
      *
      * @return Builder<FailedJob>
      */
-    public function list(array $filters = [], bool $searchPayload = false): Builder
+    public function list(array $filters = [], bool $fullText = false): Builder
     {
         return FailedJob::query()
-            ->filter($filters, $searchPayload)
+            ->filter($filters, $fullText)
             ->ordered();
     }
 

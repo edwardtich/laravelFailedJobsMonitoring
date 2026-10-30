@@ -23,6 +23,7 @@ return [
         'not_selected' => 'Не выбрано',
         'search' => 'Поиск',
         'search_placeholder' => 'payload или exception',
+        'search_placeholder_limited' => 'uuid или класс исключения',
         'failed_from' => 'Дата с',
         'failed_to' => 'Дата по',
         'submit' => 'Найти',
@@ -45,8 +46,10 @@ return [
     'actions' => [
         'back' => 'Назад',
         'details' => 'Подробно',
-        'retry' => 'Рестарт',
+        'retry' => 'Перезапустить',
         'retry_selected' => 'Перезапустить выбранные',
+        'retry_confirm' => 'Перезапустить задачу?',
+        'retry_selected_confirm' => 'Перезапустить выбранные задачи?',
         'selected_count' => 'Выбрано: :count',
         'delete' => 'Удалить',
         'delete_confirm' => 'Удалить запись?',
@@ -88,5 +91,6 @@ return [
         'bulk_retry_sent' => 'Задачи отправлены на перезапуск',
         'bulk_retry_partially_sent' => 'Часть задач отправлена на перезапуск до возникновения ошибки',
         'retry_failed' => 'Не удалось отправить задачу на перезапуск',
+        'bulk_retry_too_many' => 'За раз можно перезапустить не больше :max задач',
     ],
 ];

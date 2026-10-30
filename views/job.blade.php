@@ -15,7 +15,7 @@
         <form action="{{ route('failed-jobs-manager::retry', $failedJob->id) }}" method="post" class="fjm-inline-form">
             @csrf
             @method('patch')
-            <button type="submit" class="fjm-button fjm-button-orange">
+            <button type="submit" class="fjm-button fjm-button-orange" onclick="return confirm(@js(__('failed-jobs-manager::failed-jobs-manager.actions.retry_confirm')))">
                 {{ __('failed-jobs-manager::failed-jobs-manager.actions.retry') }}
             </button>
         </form>
@@ -67,39 +67,14 @@
 
         <section class="fjm-detail-card fjm-detail-card-danger">
             <h4 class="fjm-section-title">{{ __('failed-jobs-manager::failed-jobs-manager.details.exception_summary') }}</h4>
-            <div class="fjm-exception-message">{{ $exception->safeMessage() }}</div>
+            <div class="fjm-exception-message">{{ $exception->safeMessage(! $canViewUnmasked) }}</div>
             <br>
             <dl class="fjm-kv">
-                @foreach($exception->summary() as $label => $value)
+                @foreach($exception->summary(! $canViewUnmasked) as $label => $value)
                     <dt>{{ $label }}</dt>
                     <dd>{{ $value === null || $value === '' ? __('failed-jobs-manager::failed-jobs-manager.details.empty_value') : $value }}</dd>
                 @endforeach
             </dl>
         </section>
     </div>
-
-    @if($canViewSensitivePayload)
-        @if($payload->command())
-            <details class="fjm-details">
-                <summary>{{ __('failed-jobs-manager::failed-jobs-manager.details.serialized_command') }}</summary>
-                <div class="fjm-details-body">
-                    <pre class="fjm-pre">{{ $payload->command() }}</pre>
-                </div>
-            </details>
-        @endif
-
-        <details class="fjm-details">
-            <summary>{{ __('failed-jobs-manager::failed-jobs-manager.details.raw_payload') }}</summary>
-            <div class="fjm-details-body">
-                <pre class="fjm-pre">{{ $payload->pretty() }}</pre>
-            </div>
-        </details>
-
-        <details class="fjm-details">
-            <summary>{{ __('failed-jobs-manager::failed-jobs-manager.details.raw_exception') }}</summary>
-            <div class="fjm-details-body">
-                <pre class="fjm-pre">{{ $exception->raw() }}</pre>
-            </div>
-        </details>
-    @endif
 @endsection

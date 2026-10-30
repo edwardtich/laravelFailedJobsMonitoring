@@ -12,7 +12,7 @@
             </div>
             <div class="fjm-field">
                 <label>{{ __('failed-jobs-manager::failed-jobs-manager.filters.search') }}</label>
-                <input class="fjm-control" name="search" value="{{ request('search') }}" placeholder="{{ __('failed-jobs-manager::failed-jobs-manager.filters.search_placeholder') }}"/>
+                <input class="fjm-control" name="search" value="{{ request('search') }}" placeholder="{{ __('failed-jobs-manager::failed-jobs-manager.filters.' . ($canViewUnmasked ? 'search_placeholder' : 'search_placeholder_limited')) }}"/>
             </div>
             <div class="fjm-field">
                 <label>{{ __('failed-jobs-manager::failed-jobs-manager.filters.failed_from') }}</label>
