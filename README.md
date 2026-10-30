@@ -156,6 +156,7 @@ return [
     'filament' => [
         'cluster' => null,
         'register_navigation' => true,
+        'register_in_main_navigation' => false,
         'navigation_group' => null,
         'navigation_parent_item' => null,
         'navigation_sort' => null,
@@ -307,6 +308,7 @@ Example:
 'filament' => [
     'cluster' => \App\Filament\Clusters\AdministrationCluster::class,
     'register_navigation' => true,
+    'register_in_main_navigation' => true,
     'navigation_group' => 'System',
     'navigation_parent_item' => 'Administration',
     'navigation_sort' => 40,
@@ -331,6 +333,8 @@ public function panel(Panel $panel): Panel
         ]);
 }
 ```
+
+Filament does not add clustered pages to the main navigation: they are expected in the cluster sub-navigation. If the cluster hides its sub-navigation (`$shouldRegisterSubNavigation = false`) and clustered items are shown under a parent item of the main sidebar, set `register_in_main_navigation` to `true`. Without it the page is reachable only by URL. With a regular cluster sub-navigation keep it `false`, otherwise the page appears in both menus.
 
 If the sidebar is composed manually through a parent item array, add the page there too:
 

@@ -156,6 +156,7 @@ return [
     'filament' => [
         'cluster' => null,
         'register_navigation' => true,
+        'register_in_main_navigation' => false,
         'navigation_group' => null,
         'navigation_parent_item' => null,
         'navigation_sort' => null,
@@ -307,6 +308,7 @@ php artisan failed-jobs-manager:permissions --guard=web
 'filament' => [
     'cluster' => \App\Filament\Clusters\AdministrationCluster::class,
     'register_navigation' => true,
+    'register_in_main_navigation' => true,
     'navigation_group' => 'Справочник',
     'navigation_parent_item' => 'Администрирование',
     'navigation_sort' => 40,
@@ -331,6 +333,8 @@ public function panel(Panel $panel): Panel
         ]);
 }
 ```
+
+Filament не добавляет страницы из кластера в общее меню: они должны показываться в подменю кластера. Если подменю кластера скрыто (`$shouldRegisterSubNavigation = false`), а его пункты выводятся под родительским пунктом общего бокового меню, включите `register_in_main_navigation`. Без этого страница доступна только по прямой ссылке. При обычном подменю кластера оставьте `false`, иначе страница появится в обоих меню.
 
 Если боковое меню собирается вручную через массив родительского пункта, добавьте страницу и туда:
 

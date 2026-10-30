@@ -85,6 +85,27 @@ class FailedJobsManagerPage extends Page
         return (bool) config('failed-jobs-manager.filament.register_navigation', true);
     }
 
+    /**
+     * Filament skips clustered pages in the main navigation. With register_in_main_navigation
+     * the page is added there anyway, for panels that compose the sidebar from parent items
+     * instead of the cluster sub-navigation.
+     */
+    public static function registerNavigationItems(): void
+    {
+        if (blank(static::getCluster()) || ! config('failed-jobs-manager.filament.register_in_main_navigation', false)) {
+            parent::registerNavigationItems();
+
+            return;
+        }
+
+        if (! static::shouldRegisterNavigation() || ! static::canAccess()) {
+            return;
+        }
+
+        Filament::getCurrentOrDefaultPanel()
+            ->navigationItems(static::getNavigationItems());
+    }
+
     public static function canAccess(): bool
     {
         $user = Filament::auth()?->user();

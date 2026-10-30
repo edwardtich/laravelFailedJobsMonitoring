@@ -49,6 +49,9 @@ return [
     'filament' => [
         'cluster' => null,
         'register_navigation' => true,
+        // Filament leaves clustered pages out of the main navigation. Set to true when the panel
+        // hides the cluster sub-navigation and shows clustered items under navigation_parent_item.
+        'register_in_main_navigation' => false,
         'navigation_group' => null,
         'navigation_parent_item' => null,
         'navigation_sort' => null,
